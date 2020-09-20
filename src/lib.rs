@@ -1,8 +1,19 @@
 #![feature(arbitrary_enum_discriminant)]
 mod definitions;
-mod mqtt_server;
+mod server;
+mod frame;
+mod packet;
+mod client;
 
-pub fn eat() {
-    let mut Control_Packet: definitions::ControlPacket;
-    let mut mqtt_server:
+pub async fn start_broker() -> Result<(), Box<dyn std::error::Error>>{
+    server::MqttServer::start().await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[tokio::test]
+    async fn simple_mqtt_server_test() {
+        start_broker().await.expect("my function");
+    }
 }
