@@ -1,8 +1,12 @@
+use bytes::{Buf, Bytes};
+use std::io::Cursor;
+
 #[repr(u8)]
+#[derive(Debug)]
 pub enum ControlPacketType {
     CONNECT(u8, u8, u8, u8) = 1,
     CONNACK(u8, u8, u8, u8) = 2,
-    PUBLISH(u8, u8, u8) = 3,
+    PUBLISH(u8, u8, u8, u8) = 3,
     PUBACK(u8, u8, u8, u8) = 4,
     PUBREC(u8, u8, u8, u8) = 5,
     PUBREL(u8, u8, u8, u8) = 6,
@@ -15,6 +19,65 @@ pub enum ControlPacketType {
     PINGRESP(u8, u8, u8, u8) = 13,
     DISCONNECT(u8, u8, u8, u8) = 14,
     AUTH(u8, u8, u8, u8) = 15,
+}
+
+impl ControlPacketType {
+    pub fn new(data: u8) -> Option<ControlPacketType> {
+        let packet_type = (data & 0b11110000) >> 4;
+        let flags = ControlPacketType::flag_parser(packet_type, data);
+        match packet_type {
+            1 => Some(ControlPacketType::CONNECT(
+                flags.0, flags.1, flags.2, flags.3,
+            )),
+            2 => Some(ControlPacketType::CONNACK(
+                flags.0, flags.1, flags.2, flags.3,
+            )),
+            3 => Some(ControlPacketType::PUBLISH(
+                flags.0, flags.1, flags.2, flags.3,
+            )),
+            4 => Some(ControlPacketType::PUBACK(
+                flags.0, flags.1, flags.2, flags.3,
+            )),
+            5 => Some(ControlPacketType::PUBREC(
+                flags.0, flags.1, flags.2, flags.3,
+            )),
+            6 => Some(ControlPacketType::PUBREL(
+                flags.0, flags.1, flags.2, flags.3,
+            )),
+            7 => Some(ControlPacketType::PUBCOMP(
+                flags.0, flags.1, flags.2, flags.3,
+            )),
+            8 => Some(ControlPacketType::SUBSCRIBE(
+                flags.0, flags.1, flags.2, flags.3,
+            )),
+            9 => Some(ControlPacketType::SUBACK(
+                flags.0, flags.1, flags.2, flags.3,
+            )),
+            10 => Some(ControlPacketType::UNSUBSCRIBE(
+                flags.0, flags.1, flags.2, flags.3,
+            )),
+            11 => Some(ControlPacketType::UNSUBACK(
+                flags.0, flags.1, flags.2, flags.3,
+            )),
+            12 => Some(ControlPacketType::PINGREQ(
+                flags.0, flags.1, flags.2, flags.3,
+            )),
+            13 => Some(ControlPacketType::PINGRESP(
+                flags.0, flags.1, flags.2, flags.3,
+            )),
+            14 => Some(ControlPacketType::DISCONNECT(
+                flags.0, flags.1, flags.2, flags.3,
+            )),
+            15 => Some(ControlPacketType::AUTH(flags.0, flags.1, flags.2, flags.3)),
+            _ => None,
+        }
+    }
+    fn flag_parser(tag: u8, data: u8) -> (u8, u8, u8, u8) {
+        match tag {
+            3 => (data & 1, data & 6, data & 8, 0),
+            _ => (data & 1, data & 2, data & 4, data & 8),
+        }
+    }
 }
 #[repr(u8)]
 pub enum ReasonCode {
@@ -62,57 +125,65 @@ pub enum ReasonCode {
     SubscriptionIdentifiersNotSupported = 161,
     WildcardSubscriptionsNotSupported = 162,
 }
+#[derive(Debug, Default)]
 pub struct VariableByteInteger {
-    data: u32,
+    pub data: u32,
 }
 impl VariableByteInteger {
-    fn encode(self) -> [u8; 4] {
-        let mut encodedByte: [u8; 4] = [0; 4];
+    pub fn new(encoded_byte: &mut Cursor<&[u8]>) -> VariableByteInteger {
+        VariableByteInteger {
+            data: VariableByteInteger::decode(encoded_byte),
+        }
+    }
+    pub fn encode(self) -> [u8; 4] {
+        let mut encoded_byte: [u8; 4] = [0; 4];
         let mut x = self.data;
         let mut i = 0;
         loop {
-            encodedByte[i] = (((x % 128) + 128) % 128) as u8;
+            encoded_byte[i] = (((x % 128) + 128) % 128) as u8;
             x = x / 128;
             if x == 0 {
                 break;
             } else {
-                encodedByte[i] = encodedByte[i] | 128
+                encoded_byte[i] = encoded_byte[i] | 128
             }
             i += 1;
         }
-        encodedByte
+        encoded_byte
     }
-    fn decode(mut self, encodedByte: [u8; 4]) -> u32 {
+    pub fn decode(encoded_byte: &mut Cursor<&[u8]>) -> u32 {
         let mut multiplier: u32 = 1;
-        self.data = 0;
+        let mut data = 0;
         let mut i = 0;
         loop {
-            self.data += (encodedByte[i] & 127) as u32 * multiplier;
+            let read_byte = encoded_byte.get_u8();
+            data += (read_byte & 127) as u32 * multiplier;
             if multiplier > 128 * 128 * 128 {
                 panic!("Malformed Variable Byte Integer");
             }
             multiplier *= 128;
-            if (encodedByte[i] & 128) == 0 {
+            if (read_byte & 128) == 0 {
                 break;
             }
             i += 1;
         }
-        self.data
+        data
     }
 }
 #[repr(u8)]
+#[derive(Debug)]
 pub enum Property {
     PayloadFormatIndicator(u8) = 1,
     MessageExpiryInterval(u32) = 2,
     ContentType(String) = 3,
     ResponseTopic(String) = 8,
-    CorrelationData(Vec<u8>) = 9,
+    CorrelationData(Bytes) = 9,
     SubscriptionIdentifier(VariableByteInteger) = 11,
     SessionExpiryInterval(u32) = 17,
     AssignedClientIdentifier(String) = 18,
     ServerKeepAlive(u16) = 19,
     AuthenticationMethod(String) = 21,
-    AuthenticationData(Vec<u8>) = 22,
+    AuthenticationData(Bytes) = 22,
     RequestProblemInformation(u8) = 23,
     WillDelayInterval(u32) = 24,
     RequestResponseInformation(u8) = 25,
@@ -130,7 +201,7 @@ pub enum Property {
     SubscriptionIdentifierAvailable(u8) = 41,
     SharedSubscriptionAvailable(u8) = 42,
 }
-pub fn have_PacketIdentifier(control_packet_type: ControlPacketType) -> bool {
+pub fn have_packet_identifier(control_packet_type: ControlPacketType) -> bool {
     match control_packet_type {
         ControlPacketType::CONNECT(_, _, _, _)
         | ControlPacketType::CONNACK(_, _, _, _)
@@ -146,7 +217,7 @@ pub fn have_PacketIdentifier(control_packet_type: ControlPacketType) -> bool {
         | ControlPacketType::SUBACK(_, _, _, _)
         | ControlPacketType::UNSUBSCRIBE(_, _, _, _)
         | ControlPacketType::UNSUBACK(_, _, _, _) => true,
-        ControlPacketType::PUBLISH(_, qos, _) => {
+        ControlPacketType::PUBLISH(_, qos, _, _) => {
             if qos > 0 {
                 return true;
             } else {
@@ -155,17 +226,19 @@ pub fn have_PacketIdentifier(control_packet_type: ControlPacketType) -> bool {
         }
     }
 }
-pub enum ControlPacketTypeFlags {}
+#[derive(Debug)]
 pub struct FixHeader {
-    control_packet: ControlPacketType,
-    control_packet_type_flags: ControlPacketTypeFlags,
-    remianing_lenght: i32,
+    control_packet_type: ControlPacketType,
+    remianing_lenght: VariableByteInteger,
 }
+
 pub struct PacketIdentifier {
     identifier: [u8; 2],
 }
+#[derive(Debug, Default)]
 pub struct Properties {
-    lenght: u8,
+    pub lenght: VariableByteInteger,
+    pub properties: Vec<Property>,
 }
 pub struct VariableHeader {
     packet_identifier: PacketIdentifier,
@@ -186,13 +259,14 @@ pub struct ControlPacket {
 mod tests {
     use super::*;
     #[test]
-    fn VariableByteInteger_encode() {
+    fn variable_byte_integer_encode() {
         let var = VariableByteInteger { data: 128 };
         assert_eq!(var.encode(), [0x80, 0x1, 0, 0]);
     }
     #[test]
-    fn VariableByteInteger_decode() {
-        let var = VariableByteInteger { data: 0 };
-        assert_eq!(var.decode([0x80, 0x1, 0, 0]), 128);
+    fn variable_byte_integer_decode() {
+        let test_vec = vec![0x80, 0x1, 0, 0];
+        let mut buff = Cursor::new(test_vec.as_slice());
+        assert_eq!(VariableByteInteger::decode(&mut buff), 128);
     }
 }
