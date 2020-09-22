@@ -99,8 +99,8 @@ impl Frame {
     }
     fn flag_parser(tag: u8, data: u8) -> Flags {
         match tag {
-            3 => Flags(data & 1, data & 6, data & 8, 0),
-            _ => Flags(data & 1, data & 2, data & 4, data & 8),
+            3 => Flags(data & 1, (data & 6) >> 1, 0, (data & 8) >> 3),
+            _ => Flags(data & 1, (data & 2) >> 1, (data & 4) >> 2, (data & 8) >> 3),
         }
     }
     pub fn decode_connect_packet(src: &mut Cursor<&[u8]>) -> Result<ConnectControlPacket, Error> {
@@ -236,9 +236,9 @@ impl Frame {
         bytes.put_u8(
             (src.control_packet_type.to_u8().unwrap() << 4)
                 | src.flags.0
-                | src.flags.1
-                | src.flags.2
-                | src.flags.3,
+                | (src.flags.1 << 1)
+                | (src.flags.2 << 2)
+                | (src.flags.3 << 3),
         );
     }
     pub fn encode_properties(src: Vec<Property>, bytes: &mut BytesMut) {

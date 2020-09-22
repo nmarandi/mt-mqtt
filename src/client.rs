@@ -96,8 +96,8 @@ impl Client {
                 // An error was encountered
                 Err(Error::Other(err)) => {
                     println!("{}", err);
-                    break
-                },
+                    break;
+                }
             }
         }
     }
