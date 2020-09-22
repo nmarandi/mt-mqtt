@@ -1,11 +1,11 @@
 #![feature(arbitrary_enum_discriminant)]
+mod client;
 mod definitions;
-mod server;
 mod frame;
 mod packet;
-mod client;
+mod server;
 
-pub async fn start_broker() -> Result<(), Box<dyn std::error::Error>>{
+pub async fn start_broker() -> Result<(), Box<dyn std::error::Error>> {
     server::MqttServer::start().await
 }
 

@@ -15,9 +15,8 @@ impl MqttServer {
     }
     pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
         let bind_addr = String::from("0.0.0.0:") + &UNSECURE_TCP_PORT.to_string();
-        let mut unsecure_listener =
-            TcpListener::bind(bind_addr.clone()).await?;
-            println!("Listening on {}", bind_addr);
+        let mut unsecure_listener = TcpListener::bind(bind_addr.clone()).await?;
+        println!("Listening on {}", bind_addr);
         loop {
             // Asynchronously wait for an inbound socket.
             let (socket, addr) = unsecure_listener.accept().await?;
