@@ -1,6 +1,7 @@
 use bytes::{Buf, Bytes};
 use num_derive::{FromPrimitive, ToPrimitive};
 use std::io::Cursor;
+use strum_macros::Display;
 
 #[repr(u8)]
 #[derive(Debug, FromPrimitive, ToPrimitive)]
@@ -24,15 +25,8 @@ pub enum ControlPacketType {
 #[repr(u8)]
 #[derive(Debug, FromPrimitive, ToPrimitive)]
 #[allow(dead_code)]
-pub enum ReasonCode {
-    SuccessNormalDisconnectionGrantedQoS0 = 0,
-    GrantedQoS1 = 1,
-    GrantedQoS2 = 2,
-    DisconnectWithWillMessage = 4,
-    NoMatchingSubscribers = 16,
-    Nosubscriptionexisted = 17,
-    ContinueAuthentication = 24,
-    ReAuthenticate = 25,
+pub enum ConnAckReasonCode {
+    Success = 0,
     UnspecifiedError = 128,
     MalformedPacket = 129,
     ProtocolError = 130,
@@ -44,14 +38,139 @@ pub enum ReasonCode {
     ServerUnavailable = 136,
     ServerBusy = 137,
     Banned = 138,
-    ServerShuttingDown = 139,
     BadAuthenticationMethod = 140,
+    TopicNameInvalid = 144,
+    PacketTooLarge = 149,
+    QuotaExceeded = 151,
+    PayloadFormatInvalid = 153,
+    RetainNotSupported = 154,
+    QoSNotSupported = 155,
+    UseAnotherServer = 156,
+    ServerMoved = 157,
+    ConnectionRateExceeded = 159,
+}
+impl Default for ConnAckReasonCode {
+    fn default() -> Self {
+        Self::Success
+    }
+}
+#[repr(u8)]
+#[derive(Debug, FromPrimitive, ToPrimitive)]
+#[allow(dead_code)]
+pub enum PubAckReasonCode {
+    Success = 0,
+    NoMatchingSubscribers = 16,
+    UnspecifiedError = 128,
+    ImplementationSpecificError = 131,
+    NotAuthorized = 135,
+    TopicNameInvalid = 144,
+    PacketIdentifierInUse = 145,
+    QuotaExceeded = 151,
+    PayloadFormatInvalid = 153,
+}
+impl Default for PubAckReasonCode {
+    fn default() -> Self {
+        Self::Success
+    }
+}
+#[repr(u8)]
+#[derive(Debug, FromPrimitive, ToPrimitive)]
+#[allow(dead_code)]
+pub enum PubRecReasonCode {
+    Success = 0,
+    NoMatchingSubscribers = 16,
+    UnspecifiedError = 128,
+    ImplementationSpecificError = 131,
+    NotAuthorized = 135,
+    TopicNameInvalid = 144,
+    PacketIdentifierInUse = 145,
+    QuotaExceeded = 151,
+    PayloadFormatInvalid = 153,
+}
+impl Default for PubRecReasonCode {
+    fn default() -> Self {
+        Self::Success
+    }
+}
+#[repr(u8)]
+#[derive(Debug, FromPrimitive, ToPrimitive)]
+#[allow(dead_code)]
+pub enum PubRelReasonCode {
+    Success = 0,
+    PacketIdentifierNotFound = 146,
+}
+impl Default for PubRelReasonCode {
+    fn default() -> Self {
+        Self::Success
+    }
+}
+#[repr(u8)]
+#[derive(Debug, FromPrimitive, ToPrimitive)]
+#[allow(dead_code)]
+pub enum PubCompReasonCode {
+    Success = 0,
+    PacketIdentifierNotFound = 146,
+}
+impl Default for PubCompReasonCode {
+    fn default() -> Self {
+        Self::Success
+    }
+}
+#[repr(u8)]
+#[derive(Debug, FromPrimitive, ToPrimitive)]
+#[allow(dead_code)]
+pub enum SubAckReasonCode {
+    GrantedQoS0 = 0,
+    GrantedQoS1 = 1,
+    GrantedQoS2 = 2,
+    UnspecifiedError = 128,
+    ImplementationSpecificError = 131,
+    NotAuthorized = 135,
+    TopicFilterInvalid = 143,
+    PacketIdentifierInUse = 145,
+    QuotaExceeded = 151,
+    SharedSubscriptionsNotSupported = 158,
+    SubscriptionIdentifiersNotSupported = 161,
+    WildcardSubscriptionsNotSupported = 162,
+}
+impl Default for SubAckReasonCode {
+    fn default() -> Self {
+        Self::UnspecifiedError
+    }
+}
+#[repr(u8)]
+#[derive(Debug, FromPrimitive, ToPrimitive)]
+#[allow(dead_code)]
+pub enum UnSubAckReasonCode {
+    Success = 0,
+    UnspecifiedError = 128,
+    ImplementationSpecificError = 131,
+    NotAuthorized = 135,
+    TopicFilterInvalid = 143,
+    PacketIdentifierInUse = 145,
+}
+impl Default for UnSubAckReasonCode {
+    fn default() -> Self {
+        Self::Success
+    }
+}
+#[repr(u8)]
+#[derive(Debug, FromPrimitive, ToPrimitive)]
+#[allow(dead_code)]
+pub enum DisconnectReasonCode {
+    NormalDisconnection = 0,
+    DisconnectWithWillMessage = 4,
+    UnspecifiedError = 128,
+    MalformedPacket = 129,
+    ProtocolError = 130,
+    ImplementationSpecificError = 131,
+    NotAuthorized = 135,
+    ServerBusy = 137,
+    ServerShuttingDown = 139,
     KeepAliveTimeout = 141,
     SessionTakenOver = 142,
     TopicFilterInvalid = 143,
     TopicNameInvalid = 144,
-    PacketIdentifierInUse = 145,
-    PacketIdentifierNotFound = 146,
     ReceiveMaximumExceeded = 147,
     TopicAliasInvalid = 148,
     PacketTooLarge = 149,
@@ -69,9 +188,22 @@ pub enum ReasonCode {
     SubscriptionIdentifiersNotSupported = 161,
     WildcardSubscriptionsNotSupported = 162,
 }
-impl Default for ReasonCode {
-    fn default() -> ReasonCode {
-        ReasonCode::SuccessNormalDisconnectionGrantedQoS0
+impl Default for DisconnectReasonCode {
+    fn default() -> Self {
+        Self::NormalDisconnection
+    }
+}
+#[repr(u8)]
+#[derive(Debug, FromPrimitive, ToPrimitive)]
+#[allow(dead_code)]
+pub enum AuthenticateReasonCode {
+    Success = 0,
+    ContinueAuthentication = 24,
+    ReAuthenticate = 25,
+}
+impl Default for AuthenticateReasonCode {
+    fn default() -> Self {
+        Self::Success
     }
 }
 #[derive(Debug, Default, Copy, Clone)]
@@ -79,7 +211,10 @@ pub struct VariableByteInteger {
     pub data: u32,
 }
 impl VariableByteInteger {
-    pub fn new(encoded_byte: &mut Cursor<&[u8]>) -> VariableByteInteger {
+    pub fn new() -> VariableByteInteger {
+        VariableByteInteger { data: 0 }
+    }
+    pub fn from(encoded_byte: &mut Cursor<&[u8]>) -> VariableByteInteger {
         VariableByteInteger {
             data: VariableByteInteger::decode(encoded_byte),
         }
@@ -123,7 +258,7 @@ impl VariableByteInteger {
     }
 }
 #[repr(u8)]
-#[derive(Debug)]
+#[derive(Display, Debug, Clone)]
 pub enum Property {
     PayloadFormatIndicator(u8) = 1,
     MessageExpiryInterval(u32) = 2,
@@ -153,6 +288,7 @@ pub enum Property {
     SubscriptionIdentifierAvailable(u8) = 41,
     SharedSubscriptionAvailable(u8) = 42,
 }
+#[allow(dead_code)]
 pub fn have_packet_identifier(fix_header: FixHeader) -> bool {
     match fix_header.control_packet_type {
         ControlPacketType::CONNECT
@@ -192,12 +328,6 @@ impl FixHeader {
             flags,
         }
     }
-}
-pub struct PacketIdentifier {
-    identifier: [u8; 2],
-}
-pub struct VariableHeader {
-    packet_identifier: PacketIdentifier,
 }
 pub enum PayloadCondition {
     Required,

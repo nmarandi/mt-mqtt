@@ -4,6 +4,8 @@ mod definitions;
 mod frame;
 mod packet;
 mod server;
+extern crate strum;
+extern crate strum_macros;
 
 pub async fn start_broker() -> Result<(), Box<dyn std::error::Error>> {
     server::MqttServer::start().await
