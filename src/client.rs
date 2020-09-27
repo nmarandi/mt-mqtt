@@ -9,6 +9,7 @@ pub struct Client {
     read: ReadHalf<TcpStream>,
     write: WriteHalf<TcpStream>,
     buffer: BytesMut,
+    id: String,
 }
 
 impl Client {
@@ -19,6 +20,7 @@ impl Client {
             write: wr,
             // Allocate the buffer with 4kb of capacity.
             buffer: BytesMut::with_capacity(4096),
+            id: String::from(""),
         }
     }
     pub async fn read_frame(&mut self) -> Result<Frame, Error> {
@@ -81,12 +83,36 @@ impl Client {
                     println!("connection_packet: {:?}", msg.control_packet);
                     match msg.control_packet {
                         ControlPacket::Connect(control_packet) => {
+                            self.id = control_packet.payload.client_identifier;
                             self.write_value(
                                 &mut Frame::serialize(Frame::new(ControlPacketType::CONNACK))
                                     .unwrap(),
                             )
                             .await
                             .unwrap();
+                        }
+                        ControlPacket::Publish(control_packet) => {
+                            if msg.fix_header.flags.1 == 1 {
+                                let pub_ack_control_packet = PubAckControlPacket {
+                                    variable_header: PubAckVariableHeader::from(
+                                        control_packet.variable_header.packet_identifier,
+                                        PubAckReasonCode::Success,
+                                        Vec::new(),
+                                    ),
+                                };
+                                let pub_ack = Frame {
+                                    fix_header: FixHeader::new(
+                                        ControlPacketType::PUBACK,
+                                        Flags(0, 0, 0, 0),
+                                    ),
+                                    control_packet: ControlPacket::PubAck(pub_ack_control_packet),
+                                };
+                                self.write_value(&mut Frame::serialize(pub_ack).unwrap())
+                                    .await
+                                    .unwrap()
+                            } else {
+                                break;
+                            }
                         }
                         _ => break,
                     }
