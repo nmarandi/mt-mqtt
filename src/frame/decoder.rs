@@ -111,6 +111,35 @@ pub fn decode_pub_rel_variable_header(
     Ok(pub_rel_variable_header)
 }
 
+pub fn decode_subscribe_packet(src: &mut Cursor<&[u8]>) -> Result<SubscribeControlPacket, Error> {
+    let mut pub_rel_control_packet: SubscribeControlPacket = Default::default();
+    pub_rel_control_packet.variable_header = decode_subscribe_variable_header(src).unwrap();
+    Ok(pub_rel_control_packet)
+}
+pub fn decode_subscribe_variable_header(
+    src: &mut Cursor<&[u8]>,
+) -> Result<SubscribeVariableHeader, Error> {
+    let mut subscribe_variable_header: SubscribeVariableHeader = Default::default();
+    subscribe_variable_header.packet_identifier = src.get_u16();
+    subscribe_variable_header.set_properties(decode_properties(src).unwrap());
+    subscribe_variable_header.subscribe_payload = decode_subscribe_payload(src).unwrap();
+    Ok(subscribe_variable_header)
+}
+pub fn decode_subscribe_payload(src: &mut Cursor<&[u8]>) -> Result<Vec<SubscribePayload>, Error> {
+    let mut subscribe_payload: Vec<SubscribePayload> = Vec::new();
+    while src.has_remaining() {
+        subscribe_payload.push(SubscribePayload {
+            topic_filter: decode_string(src).unwrap(),
+            subscription_options: decode_subscription_options(src).unwrap(),
+        })
+    }
+    Ok(subscribe_payload)
+}
+
+pub fn decode_subscription_options(src: &mut Cursor<&[u8]>) -> Result<SubscriptionOptions, Error> {
+    Ok(SubscriptionOptions::new(src.get_u8()))
+}
+
 pub fn decode_string(src: &mut Cursor<&[u8]>) -> Result<String, Error> {
     let str_size_bytes = src.get_u16() as usize;
 
@@ -165,7 +194,7 @@ pub fn decode_properties(src: &mut Cursor<&[u8]>) -> Result<Vec<Option<Property>
             33 => Property::ReceiveMaximum(src.get_u16()),
             34 => Property::TopicAliasMaximum(src.get_u16()),
             35 => Property::TopicAlias(src.get_u16()),
-            36 => Property::MaximumQoS(src.get_u8()),
+            36 => Property::MaximumQoS(Qos::from_u8(src.get_u8()).unwrap()),
             37 => Property::RetainAvailable(src.get_u8()),
             38 => Property::UserProperty(decode_string(src).unwrap()),
             39 => Property::MaximumPacketSize(src.get_u32()),
