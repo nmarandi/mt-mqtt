@@ -1,7 +1,10 @@
 use crate::definitions::*;
 use bytes::Bytes;
+use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
 use std::collections::HashMap;
 use std::string::ToString;
+use strum_macros::Display;
 
 #[derive(Debug, Default)]
 pub struct Properties {
@@ -112,13 +115,13 @@ impl PublishVariableHeader {
             None,
         );
         properties_map.insert(Property::ContentType(String::from("")).to_string(), None);
-        let publish_properties = Properties {
+        let properties = Properties {
             properties: properties_map,
         };
         Self {
             topic_name: String::from(""),
             packet_identifier: 0,
-            properties: publish_properties,
+            properties,
         }
     }
     pub fn from(
@@ -159,13 +162,13 @@ impl PubAckVariableHeader {
         let mut properties_map = HashMap::new();
         properties_map.insert(Property::ReasonString(String::from("")).to_string(), None);
         properties_map.insert(Property::UserProperty(String::from("")).to_string(), None);
-        let publish_properties = Properties {
+        let properties = Properties {
             properties: properties_map,
         };
         Self {
             packet_identifier: 0,
             reason_code: PubAckReasonCode::default(),
-            properties: publish_properties,
+            properties,
         }
     }
     pub fn from(
@@ -206,13 +209,13 @@ impl PubRecVariableHeader {
         let mut properties_map = HashMap::new();
         properties_map.insert(Property::ReasonString(String::from("")).to_string(), None);
         properties_map.insert(Property::UserProperty(String::from("")).to_string(), None);
-        let publish_properties = Properties {
+        let properties = Properties {
             properties: properties_map,
         };
         Self {
             packet_identifier: 0,
             reason_code: PubRecReasonCode::default(),
-            properties: publish_properties,
+            properties,
         }
     }
     pub fn from(
@@ -253,13 +256,13 @@ impl PubRelVariableHeader {
         let mut properties_map = HashMap::new();
         properties_map.insert(Property::ReasonString(String::from("")).to_string(), None);
         properties_map.insert(Property::UserProperty(String::from("")).to_string(), None);
-        let publish_properties = Properties {
+        let properties = Properties {
             properties: properties_map,
         };
         Self {
             packet_identifier: 0,
             reason_code: PubRelReasonCode::default(),
-            properties: publish_properties,
+            properties,
         }
     }
     pub fn from(
@@ -300,13 +303,13 @@ impl PubCompVariableHeader {
         let mut properties_map = HashMap::new();
         properties_map.insert(Property::ReasonString(String::from("")).to_string(), None);
         properties_map.insert(Property::UserProperty(String::from("")).to_string(), None);
-        let publish_properties = Properties {
+        let properties = Properties {
             properties: properties_map,
         };
         Self {
             packet_identifier: 0,
             reason_code: PubCompReasonCode::default(),
-            properties: publish_properties,
+            properties,
         }
     }
     pub fn from(
@@ -328,6 +331,146 @@ impl PubCompVariableHeader {
     }
 }
 impl Default for PubCompVariableHeader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+#[derive(Debug, Default)]
+pub struct SubscribeControlPacket {
+    pub variable_header: SubscribeVariableHeader,
+}
+#[repr(u8)]
+#[derive(Display, Debug, Clone, FromPrimitive)]
+pub enum RetainHandlingOption {
+    SendRetainedMessageSubTime = 0,
+    SendRetainedMessageSubNotExist = 1,
+    NotSendRetainedMessage = 2,
+}
+impl Default for RetainHandlingOption {
+    fn default() -> Self {
+        Self::SendRetainedMessageSubTime
+    }
+}
+#[derive(Debug, Default)]
+pub struct SubscriptionOptions {
+    pub maximum_qos: Qos,
+    pub no_local_option: bool,
+    pub retain_as_published: bool,
+    pub retain_handling: RetainHandlingOption,
+    pub reserved: u8,
+}
+impl SubscriptionOptions {
+    pub fn new(byte: u8) -> SubscriptionOptions {
+        SubscriptionOptions {
+            maximum_qos: Qos::from_u8(byte & 0b0000_0011).unwrap(),
+            no_local_option: (byte & 0b0000_0100) != 0,
+            retain_as_published: (byte & 0b0000_1000) != 0,
+            retain_handling: RetainHandlingOption::from_u8((byte & 0b0011_0000) >> 4).unwrap(),
+            reserved: (byte & 0b1100_0000) >> 6,
+        }
+    }
+}
+#[derive(Debug, Default)]
+pub struct SubscribePayload {
+    pub subscription_options: SubscriptionOptions,
+    pub topic_filter: String,
+}
+#[derive(Debug)]
+pub struct SubscribeVariableHeader {
+    pub packet_identifier: u16,
+    pub subscribe_payload: Vec<SubscribePayload>,
+    properties: Properties,
+}
+impl SubscribeVariableHeader {
+    pub fn new() -> Self {
+        let mut properties_map = HashMap::new();
+        properties_map.insert(
+            Property::SubscriptionIdentifier(VariableByteInteger::new()).to_string(),
+            None,
+        );
+        properties_map.insert(Property::UserProperty(String::from("")).to_string(), None);
+        let properties = Properties {
+            properties: properties_map,
+        };
+        Self {
+            packet_identifier: 0,
+            subscribe_payload: Vec::new(),
+            properties,
+        }
+    }
+    pub fn from(
+        packet_identifier: u16,
+        subscribe_payload: Vec<SubscribePayload>,
+        _properties: Vec<Option<Property>>,
+    ) -> Self {
+        let mut pub_ack_variable_header = Self::new();
+        pub_ack_variable_header.set_properties(_properties);
+        pub_ack_variable_header.packet_identifier = packet_identifier;
+        pub_ack_variable_header.subscribe_payload = subscribe_payload;
+        pub_ack_variable_header
+    }
+    pub fn set_properties(&mut self, _properties: Vec<Option<Property>>) {
+        self.properties.set_properties_vec(_properties);
+    }
+    pub fn get_properties(&self) -> Vec<Option<Property>> {
+        self.properties.properties.values().cloned().collect()
+    }
+}
+impl Default for SubscribeVariableHeader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+#[derive(Debug, Default)]
+pub struct SubAckControlPacket {
+    pub variable_header: SubAckVariableHeader,
+}
+#[derive(Debug, Default)]
+pub struct SubAckPayload {
+    pub sub_ack_reason_codes : Vec<SubAckReasonCode>,
+}
+#[derive(Debug)]
+pub struct SubAckVariableHeader {
+    pub packet_identifier: u16,
+    pub sub_ack_payload: SubAckPayload,
+    properties: Properties,
+}
+impl SubAckVariableHeader {
+    pub fn new() -> Self {
+        let mut properties_map = HashMap::new();
+        properties_map.insert(
+            Property::SubscriptionIdentifier(VariableByteInteger::new()).to_string(),
+            None,
+        );
+        properties_map.insert(Property::UserProperty(String::from("")).to_string(), None);
+        let properties = Properties {
+            properties: properties_map,
+        };
+        Self {
+            packet_identifier: 0,
+            sub_ack_payload: Default::default(),
+            properties,
+        }
+    }
+    pub fn from(
+        packet_identifier: u16,
+        sub_ack_payload: SubAckPayload,
+        _properties: Vec<Option<Property>>,
+    ) -> Self {
+        let mut pub_ack_variable_header = Self::new();
+        pub_ack_variable_header.set_properties(_properties);
+        pub_ack_variable_header.packet_identifier = packet_identifier;
+        pub_ack_variable_header.sub_ack_payload = sub_ack_payload;
+        pub_ack_variable_header
+    }
+    pub fn set_properties(&mut self, _properties: Vec<Option<Property>>) {
+        self.properties.set_properties_vec(_properties);
+    }
+    pub fn get_properties(&self) -> Vec<Option<Property>> {
+        self.properties.properties.values().cloned().collect()
+    }
+}
+impl Default for SubAckVariableHeader {
     fn default() -> Self {
         Self::new()
     }
