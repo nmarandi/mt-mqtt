@@ -90,6 +90,27 @@ pub fn decode_publish_payload(src: &mut Cursor<&[u8]>) -> Result<PublishPayload,
     Ok(public_payload)
 }
 
+pub fn decode_pub_rel_packet(src: &mut Cursor<&[u8]>) -> Result<PubRelControlPacket, Error> {
+    let mut pub_rel_control_packet: PubRelControlPacket = Default::default();
+    pub_rel_control_packet.variable_header = decode_pub_rel_variable_header(src).unwrap();
+    Ok(pub_rel_control_packet)
+}
+pub fn decode_pub_rel_variable_header(
+    src: &mut Cursor<&[u8]>,
+) -> Result<PubRelVariableHeader, Error> {
+    let mut pub_rel_variable_header: PubRelVariableHeader = Default::default();
+    pub_rel_variable_header.packet_identifier = src.get_u16();
+    if src.has_remaining() {
+        pub_rel_variable_header.reason_code = PubRelReasonCode::from_u8(src.get_u8()).unwrap();
+        if src.has_remaining() {
+            pub_rel_variable_header.set_properties(decode_properties(src).unwrap());
+        }
+    } else {
+        pub_rel_variable_header.reason_code = PubRelReasonCode::Success;
+    }
+    Ok(pub_rel_variable_header)
+}
+
 pub fn decode_string(src: &mut Cursor<&[u8]>) -> Result<String, Error> {
     let str_size_bytes = src.get_u16() as usize;
 
