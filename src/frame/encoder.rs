@@ -22,6 +22,16 @@ pub fn encode_pub_ack_packet(src: PubAckControlPacket, bytes: &mut BytesMut) {
     bytes.put_u8(src.variable_header.reason_code.to_u8().unwrap());
     encode_properties(src.variable_header.get_properties(), bytes);
 }
+pub fn encode_pub_rec_packet(src: PubRecControlPacket, bytes: &mut BytesMut) {
+    bytes.put_u16(src.variable_header.packet_identifier);
+    bytes.put_u8(src.variable_header.reason_code.to_u8().unwrap());
+    encode_properties(src.variable_header.get_properties(), bytes);
+}
+pub fn encode_pub_comp_packet(src: PubCompControlPacket, bytes: &mut BytesMut) {
+    bytes.put_u16(src.variable_header.packet_identifier);
+    bytes.put_u8(src.variable_header.reason_code.to_u8().unwrap());
+    encode_properties(src.variable_header.get_properties(), bytes);
+}
 pub fn encode_properties(src: Vec<Option<Property>>, bytes: &mut BytesMut) {
     let mut data: BytesMut = BytesMut::new();
     for elem in src.iter() {
