@@ -23,6 +23,9 @@ pub enum ControlPacket {
     ConnAck(ConnAckControlPacket),
     Publish(PublishControlPacket),
     PubAck(PubAckControlPacket),
+    PubRec(PubRecControlPacket),
+    PubRel(PubRelControlPacket),
+    PubComp(PubCompControlPacket),
 }
 
 #[derive(Debug)]
@@ -57,10 +60,12 @@ impl Frame {
                 fix_header: FixHeader::new(control_packet_type, Flags(0, 0, 0, 0)),
                 control_packet: ControlPacket::PubAck(Default::default()),
             },
+            ControlPacketType::PUBREC => Frame {
+                fix_header: FixHeader::new(control_packet_type, Flags(0, 0, 0, 0)),
+                control_packet: ControlPacket::PubRec(Default::default()),
+            },
             _ => panic!("not implemented yet"),
-            /*ControlPacketType::PUBACK = 4,
-            ControlPacketType::PUBREC = 5,
-            ControlPacketType::PUBREL = 6,
+            /*ControlPacketType::PUBREL = 6,
             ControlPacketType::PUBCOMP = 7,
             ControlPacketType::SUBSCRIBE = 8,
             ControlPacketType::SUBACK = 9,
@@ -73,7 +78,7 @@ impl Frame {
         }
     }
     pub fn deserialize(src: &mut Cursor<&[u8]>) -> Result<Frame, Error> {
-        if src.remaining() < 5 {
+        if src.remaining() < 4 {
             return Err(Error::Incomplete(src.remaining()));
         }
         println!("start deserialize");
@@ -98,6 +103,10 @@ impl Frame {
                 ),
                 fix_header,
             }),
+            ControlPacketType::PUBREL => Ok(Frame {
+                control_packet: ControlPacket::PubRel(decode_pub_rel_packet(src).unwrap()),
+                fix_header,
+            }),
             _ => Err(Error::Other(format!("Not Implemented yet"))),
         }
     }
@@ -112,6 +121,12 @@ impl Frame {
             }
             ControlPacket::PubAck(pub_ack_packet) => {
                 encode_pub_ack_packet(pub_ack_packet, &mut src);
+            }
+            ControlPacket::PubRec(pub_rec_packet) => {
+                encode_pub_rec_packet(pub_rec_packet, &mut src);
+            }
+            ControlPacket::PubComp(pub_rec_packet) => {
+                encode_pub_comp_packet(pub_rec_packet, &mut src);
             }
             _ => {
                 return Err(Error::Other(format!("Not Implemented yet")));
