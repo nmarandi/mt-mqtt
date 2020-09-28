@@ -150,6 +150,29 @@ impl Client {
                             self.write_value(&mut Frame::serialize(pub_ack).unwrap())
                                 .await
                                 .unwrap()
+                        },
+                        ControlPacket::Subscribe(control_packet) => {
+                            let mut sub_ack_payload = SubAckPayload::default();
+                            for iter in control_packet.variable_header.subscribe_payload {
+                                sub_ack_payload.sub_ack_reason_codes.push(SubAckReasonCode::GrantedQoS0);
+                            }
+                            let sub_ack_control_packet = SubAckControlPacket {
+                                variable_header: SubAckVariableHeader::from(
+                                    control_packet.variable_header.packet_identifier,
+                                    sub_ack_payload,
+                                    Vec::new(),
+                                ),
+                            };
+                            let pub_ack = Frame {
+                                fix_header: FixHeader::new(
+                                    ControlPacketType::PUBCOMP,
+                                    Flags(0, 0, 0, 0),
+                                ),
+                                control_packet: ControlPacket::SubAck(sub_ack_control_packet),
+                            };
+                            self.write_value(&mut Frame::serialize(pub_ack).unwrap())
+                                .await
+                                .unwrap()
                         }
                         _ => break,
                     }
