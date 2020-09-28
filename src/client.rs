@@ -25,13 +25,6 @@ impl Client {
     }
     pub async fn read_frame(&mut self) -> Result<Frame, Error> {
         loop {
-            // Attempt to parse a frame from the buffered data. If
-            // enough data has been buffered, the frame is
-            // returned.
-            if let Some(frame) = self.deserialize_frame()? {
-                return Ok(frame);
-            }
-
             // There is not enough buffered data to read a frame.
             // Attempt to read more data from the socket.
             //
@@ -47,6 +40,12 @@ impl Client {
                 } else {
                     return Err(Error::Other("connection reset by peer".into()));
                 }
+            }
+            // Attempt to parse a frame from the buffered data. If
+            // enough data has been buffered, the frame is
+            // returned.
+            if let Some(frame) = self.deserialize_frame()? {
+                return Ok(frame);
             }
         }
     }
@@ -73,6 +72,7 @@ impl Client {
         }
     }
     pub async fn write_value(&mut self, src: &mut BytesMut) -> std::io::Result<()> {
+        println!("write_value: {:?}", src);
         self.write.write_buf(src).await?;
         Ok(())
     }
@@ -91,8 +91,8 @@ impl Client {
                             .await
                             .unwrap();
                         }
-                        ControlPacket::Publish(control_packet) => {
-                            if msg.fix_header.flags.1 == 1 {
+                        ControlPacket::Publish(control_packet) => match msg.fix_header.flags.1 {
+                            1 => {
                                 let pub_ack_control_packet = PubAckControlPacket {
                                     variable_header: PubAckVariableHeader::from(
                                         control_packet.variable_header.packet_identifier,
@@ -110,9 +110,46 @@ impl Client {
                                 self.write_value(&mut Frame::serialize(pub_ack).unwrap())
                                     .await
                                     .unwrap()
-                            } else {
-                                break;
                             }
+                            2 => {
+                                let pub_rec_control_packet = PubRecControlPacket {
+                                    variable_header: PubRecVariableHeader::from(
+                                        control_packet.variable_header.packet_identifier,
+                                        PubRecReasonCode::Success,
+                                        Vec::new(),
+                                    ),
+                                };
+                                let pub_ack = Frame {
+                                    fix_header: FixHeader::new(
+                                        ControlPacketType::PUBREC,
+                                        Flags(0, 0, 0, 0),
+                                    ),
+                                    control_packet: ControlPacket::PubRec(pub_rec_control_packet),
+                                };
+                                self.write_value(&mut Frame::serialize(pub_ack).unwrap())
+                                    .await
+                                    .unwrap()
+                            }
+                            _ => (),
+                        },
+                        ControlPacket::PubRel(control_packet) => {
+                            let pub_comp_control_packet = PubCompControlPacket {
+                                variable_header: PubCompVariableHeader::from(
+                                    control_packet.variable_header.packet_identifier,
+                                    PubCompReasonCode::Success,
+                                    Vec::new(),
+                                ),
+                            };
+                            let pub_ack = Frame {
+                                fix_header: FixHeader::new(
+                                    ControlPacketType::PUBCOMP,
+                                    Flags(0, 0, 0, 0),
+                                ),
+                                control_packet: ControlPacket::PubComp(pub_comp_control_packet),
+                            };
+                            self.write_value(&mut Frame::serialize(pub_ack).unwrap())
+                                .await
+                                .unwrap()
                         }
                         _ => break,
                     }
