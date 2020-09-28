@@ -26,6 +26,8 @@ pub enum ControlPacket {
     PubRec(PubRecControlPacket),
     PubRel(PubRelControlPacket),
     PubComp(PubCompControlPacket),
+    Subscribe(SubscribeControlPacket),
+    SubAck(SubAckControlPacket),
 }
 
 #[derive(Debug)]
@@ -46,11 +48,13 @@ impl Frame {
                 conn_ack_control_packet
                     .variable_header
                     .properties
-                    .push(Some(Property::AssignedClientIdentifier(String::from(""))));
+                    .push(Some(Property::AssignedClientIdentifier(String::from(
+                        "Assigned",
+                    ))));
                 conn_ack_control_packet
                     .variable_header
                     .conn_ack_flag
-                    .session_present_flag = true;
+                    .session_present_flag = false;
                 Frame {
                     fix_header: FixHeader::new(control_packet_type, Flags(0, 0, 0, 0)),
                     control_packet: ControlPacket::ConnAck(conn_ack_control_packet),
@@ -107,6 +111,10 @@ impl Frame {
                 control_packet: ControlPacket::PubRel(decode_pub_rel_packet(src).unwrap()),
                 fix_header,
             }),
+            ControlPacketType::SUBSCRIBE => Ok(Frame {
+                control_packet: ControlPacket::Subscribe(decode_subscribe_packet(src).unwrap()),
+                fix_header,
+            }),
             _ => Err(Error::Other(format!("Not Implemented yet"))),
         }
     }
@@ -116,17 +124,20 @@ impl Frame {
         encode_fix_header(frame.fix_header, &mut data);
         let mut src: BytesMut = BytesMut::new();
         match frame.control_packet {
-            ControlPacket::ConnAck(conn_ack_packet) => {
-                encode_conn_ack_packet(conn_ack_packet, &mut src);
+            ControlPacket::ConnAck(control_packet) => {
+                encode_conn_ack_packet(control_packet, &mut src);
             }
-            ControlPacket::PubAck(pub_ack_packet) => {
-                encode_pub_ack_packet(pub_ack_packet, &mut src);
+            ControlPacket::PubAck(control_packet) => {
+                encode_pub_ack_packet(control_packet, &mut src);
             }
-            ControlPacket::PubRec(pub_rec_packet) => {
-                encode_pub_rec_packet(pub_rec_packet, &mut src);
+            ControlPacket::PubRec(control_packet) => {
+                encode_pub_rec_packet(control_packet, &mut src);
             }
-            ControlPacket::PubComp(pub_rec_packet) => {
-                encode_pub_comp_packet(pub_rec_packet, &mut src);
+            ControlPacket::PubComp(control_packet) => {
+                encode_pub_comp_packet(control_packet, &mut src);
+            }
+            ControlPacket::SubAck(control_packet) => {
+                encode_sub_ack_packet(control_packet, &mut src);
             }
             _ => {
                 return Err(Error::Other(format!("Not Implemented yet")));
