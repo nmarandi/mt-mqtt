@@ -32,6 +32,16 @@ pub fn encode_pub_comp_packet(src: PubCompControlPacket, bytes: &mut BytesMut) {
     bytes.put_u8(src.variable_header.reason_code.to_u8().unwrap());
     encode_properties(src.variable_header.get_properties(), bytes);
 }
+pub fn encode_sub_ack_packet(src: SubAckControlPacket, bytes: &mut BytesMut) {
+    bytes.put_u16(src.variable_header.packet_identifier);
+    encode_properties(src.variable_header.get_properties(), bytes);
+    encode_sub_ack_payload(src.variable_header.sub_ack_payload, bytes);
+}
+pub fn encode_sub_ack_payload(src: SubAckPayload, bytes: &mut BytesMut) {
+    for iter in src.sub_ack_reason_codes {
+        bytes.put_u8(iter.to_u8().unwrap());
+    }
+}
 pub fn encode_properties(src: Vec<Option<Property>>, bytes: &mut BytesMut) {
     let mut data: BytesMut = BytesMut::new();
     for elem in src.iter() {
@@ -127,7 +137,7 @@ pub fn encode_property(src: &Property, bytes: &mut BytesMut) {
         }
         Property::MaximumQoS(p_data) => {
             bytes.put_u8(36);
-            bytes.put_u8(*p_data);
+            bytes.put_u8(p_data.to_u8().unwrap());
         }
         Property::RetainAvailable(p_data) => {
             bytes.put_u8(37);
