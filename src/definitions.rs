@@ -280,7 +280,7 @@ pub enum Property {
     ReceiveMaximum(u16) = 33,
     TopicAliasMaximum(u16) = 34,
     TopicAlias(u16) = 35,
-    MaximumQoS(u8) = 36,
+    MaximumQoS(Qos) = 36,
     RetainAvailable(u8) = 37,
     UserProperty(String) = 38,
     MaximumPacketSize(u32) = 39,
@@ -334,7 +334,18 @@ pub enum PayloadCondition {
     Optional,
     None,
 }
-
+#[repr(u8)]
+#[derive(Display, Debug, Clone, FromPrimitive, ToPrimitive)]
+pub enum Qos {
+    AtMostOnce = 0,
+    AtleastOnce = 1,
+    ExactlyOnce = 2,
+}
+impl Default for Qos {
+    fn default() -> Self {
+        Self::AtMostOnce
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
