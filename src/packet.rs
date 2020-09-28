@@ -191,3 +191,144 @@ impl Default for PubAckVariableHeader {
         Self::new()
     }
 }
+#[derive(Debug, Default)]
+pub struct PubRecControlPacket {
+    pub variable_header: PubRecVariableHeader,
+}
+#[derive(Debug)]
+pub struct PubRecVariableHeader {
+    pub packet_identifier: u16,
+    pub reason_code: PubRecReasonCode,
+    properties: Properties,
+}
+impl PubRecVariableHeader {
+    pub fn new() -> Self {
+        let mut properties_map = HashMap::new();
+        properties_map.insert(Property::ReasonString(String::from("")).to_string(), None);
+        properties_map.insert(Property::UserProperty(String::from("")).to_string(), None);
+        let publish_properties = Properties {
+            properties: properties_map,
+        };
+        Self {
+            packet_identifier: 0,
+            reason_code: PubRecReasonCode::default(),
+            properties: publish_properties,
+        }
+    }
+    pub fn from(
+        packet_identifier: u16,
+        reason_code: PubRecReasonCode,
+        _properties: Vec<Option<Property>>,
+    ) -> Self {
+        let mut pub_ack_variable_header = Self::new();
+        pub_ack_variable_header.set_properties(_properties);
+        pub_ack_variable_header.packet_identifier = packet_identifier;
+        pub_ack_variable_header.reason_code = reason_code;
+        pub_ack_variable_header
+    }
+    pub fn set_properties(&mut self, _properties: Vec<Option<Property>>) {
+        self.properties.set_properties_vec(_properties);
+    }
+    pub fn get_properties(&self) -> Vec<Option<Property>> {
+        self.properties.properties.values().cloned().collect()
+    }
+}
+impl Default for PubRecVariableHeader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+#[derive(Debug, Default)]
+pub struct PubRelControlPacket {
+    pub variable_header: PubRelVariableHeader,
+}
+#[derive(Debug)]
+pub struct PubRelVariableHeader {
+    pub packet_identifier: u16,
+    pub reason_code: PubRelReasonCode,
+    properties: Properties,
+}
+impl PubRelVariableHeader {
+    pub fn new() -> Self {
+        let mut properties_map = HashMap::new();
+        properties_map.insert(Property::ReasonString(String::from("")).to_string(), None);
+        properties_map.insert(Property::UserProperty(String::from("")).to_string(), None);
+        let publish_properties = Properties {
+            properties: properties_map,
+        };
+        Self {
+            packet_identifier: 0,
+            reason_code: PubRelReasonCode::default(),
+            properties: publish_properties,
+        }
+    }
+    pub fn from(
+        packet_identifier: u16,
+        reason_code: PubRelReasonCode,
+        _properties: Vec<Option<Property>>,
+    ) -> Self {
+        let mut pub_ack_variable_header = Self::new();
+        pub_ack_variable_header.set_properties(_properties);
+        pub_ack_variable_header.packet_identifier = packet_identifier;
+        pub_ack_variable_header.reason_code = reason_code;
+        pub_ack_variable_header
+    }
+    pub fn set_properties(&mut self, _properties: Vec<Option<Property>>) {
+        self.properties.set_properties_vec(_properties);
+    }
+    pub fn get_properties(&self) -> Vec<Option<Property>> {
+        self.properties.properties.values().cloned().collect()
+    }
+}
+impl Default for PubRelVariableHeader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+#[derive(Debug, Default)]
+pub struct PubCompControlPacket {
+    pub variable_header: PubCompVariableHeader,
+}
+#[derive(Debug)]
+pub struct PubCompVariableHeader {
+    pub packet_identifier: u16,
+    pub reason_code: PubCompReasonCode,
+    properties: Properties,
+}
+impl PubCompVariableHeader {
+    pub fn new() -> Self {
+        let mut properties_map = HashMap::new();
+        properties_map.insert(Property::ReasonString(String::from("")).to_string(), None);
+        properties_map.insert(Property::UserProperty(String::from("")).to_string(), None);
+        let publish_properties = Properties {
+            properties: properties_map,
+        };
+        Self {
+            packet_identifier: 0,
+            reason_code: PubCompReasonCode::default(),
+            properties: publish_properties,
+        }
+    }
+    pub fn from(
+        packet_identifier: u16,
+        reason_code: PubCompReasonCode,
+        _properties: Vec<Option<Property>>,
+    ) -> Self {
+        let mut pub_ack_variable_header = Self::new();
+        pub_ack_variable_header.set_properties(_properties);
+        pub_ack_variable_header.packet_identifier = packet_identifier;
+        pub_ack_variable_header.reason_code = reason_code;
+        pub_ack_variable_header
+    }
+    pub fn set_properties(&mut self, _properties: Vec<Option<Property>>) {
+        self.properties.set_properties_vec(_properties);
+    }
+    pub fn get_properties(&self) -> Vec<Option<Property>> {
+        self.properties.properties.values().cloned().collect()
+    }
+}
+impl Default for PubCompVariableHeader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
