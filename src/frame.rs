@@ -28,6 +28,12 @@ pub enum ControlPacket {
     PubComp(PubCompControlPacket),
     Subscribe(SubscribeControlPacket),
     SubAck(SubAckControlPacket),
+    Unsubscribe(UnsubAckControlPacket),
+    UnsubAck(UnsubAckControlPacket),
+    PingReq,
+    PingResp,
+    Disconnect(DisconnectControlPacket),
+    Auth(AuthControlPacket),
 }
 
 #[derive(Debug)]
