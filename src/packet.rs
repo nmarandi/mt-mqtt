@@ -427,7 +427,7 @@ pub struct SubAckControlPacket {
 }
 #[derive(Debug, Default)]
 pub struct SubAckPayload {
-    pub sub_ack_reason_codes : Vec<SubAckReasonCode>,
+    pub sub_ack_reason_codes: Vec<SubAckReasonCode>,
 }
 #[derive(Debug)]
 pub struct SubAckVariableHeader {
@@ -471,6 +471,192 @@ impl SubAckVariableHeader {
     }
 }
 impl Default for SubAckVariableHeader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+#[derive(Debug, Default)]
+pub struct UnsubscribeControlPacket {
+    pub variable_header: UnsubscribeVariableHeader,
+}
+#[derive(Debug, Default)]
+pub struct UnsubscribePayload {
+    pub topic_filters: Vec<String>,
+}
+#[derive(Debug)]
+pub struct UnsubscribeVariableHeader {
+    pub unsubscribe_payload: UnsubscribePayload,
+    properties: Properties,
+}
+impl UnsubscribeVariableHeader {
+    pub fn new() -> Self {
+        let mut properties_map = HashMap::new();
+        properties_map.insert(Property::UserProperty(String::from("")).to_string(), None);
+        let properties = Properties {
+            properties: properties_map,
+        };
+        Self {
+            unsubscribe_payload: UnsubscribePayload::default(),
+            properties,
+        }
+    }
+    pub fn from(
+        unsubscribe_payload: UnsubscribePayload,
+        _properties: Vec<Option<Property>>,
+    ) -> Self {
+        let mut pub_ack_variable_header = Self::new();
+        pub_ack_variable_header.set_properties(_properties);
+        pub_ack_variable_header.unsubscribe_payload = unsubscribe_payload;
+        pub_ack_variable_header
+    }
+    pub fn set_properties(&mut self, _properties: Vec<Option<Property>>) {
+        self.properties.set_properties_vec(_properties);
+    }
+    pub fn get_properties(&self) -> Vec<Option<Property>> {
+        self.properties.properties.values().cloned().collect()
+    }
+}
+impl Default for UnsubscribeVariableHeader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+#[derive(Debug, Default)]
+pub struct UnsubAckControlPacket {
+    pub variable_header: UnsubAckVariableHeader,
+}
+#[derive(Debug, Default)]
+pub struct UnsubAckPayload {
+    pub un_sub_ack_reason_code: Vec<UnSubAckReasonCode>,
+}
+#[derive(Debug)]
+pub struct UnsubAckVariableHeader {
+    pub unsub_ack_payload: UnsubAckPayload,
+    properties: Properties,
+}
+impl UnsubAckVariableHeader {
+    pub fn new() -> Self {
+        let mut properties_map = HashMap::new();
+        properties_map.insert(Property::ReasonString(String::from("")).to_string(), None);
+        properties_map.insert(Property::UserProperty(String::from("")).to_string(), None);
+        let properties = Properties {
+            properties: properties_map,
+        };
+        Self {
+            unsub_ack_payload: UnsubAckPayload::default(),
+            properties,
+        }
+    }
+    pub fn from(unsub_ack_payload: UnsubAckPayload, _properties: Vec<Option<Property>>) -> Self {
+        let mut pub_ack_variable_header = Self::new();
+        pub_ack_variable_header.set_properties(_properties);
+        pub_ack_variable_header.unsub_ack_payload = unsub_ack_payload;
+        pub_ack_variable_header
+    }
+    pub fn set_properties(&mut self, _properties: Vec<Option<Property>>) {
+        self.properties.set_properties_vec(_properties);
+    }
+    pub fn get_properties(&self) -> Vec<Option<Property>> {
+        self.properties.properties.values().cloned().collect()
+    }
+}
+impl Default for UnsubAckVariableHeader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+#[derive(Debug, Default)]
+pub struct DisconnectControlPacket {
+    pub variable_header: DisconnectVariableHeader,
+}
+#[derive(Debug)]
+pub struct DisconnectVariableHeader {
+    pub disconnect_reason_code: DisconnectReasonCode,
+    properties: Properties,
+}
+impl DisconnectVariableHeader {
+    pub fn new() -> Self {
+        let mut properties_map = HashMap::new();
+        properties_map.insert(Property::SessionExpiryInterval(0).to_string(), None);
+        properties_map.insert(Property::ReasonString(String::from("")).to_string(), None);
+        properties_map.insert(Property::UserProperty(String::from("")).to_string(), None);
+        properties_map.insert(
+            Property::ServerReference(String::from("")).to_string(),
+            None,
+        );
+        let properties = Properties {
+            properties: properties_map,
+        };
+        Self {
+            disconnect_reason_code: DisconnectReasonCode::default(),
+            properties,
+        }
+    }
+    pub fn from(
+        disconnect_reason_code: DisconnectReasonCode,
+        _properties: Vec<Option<Property>>,
+    ) -> Self {
+        let mut pub_ack_variable_header = Self::new();
+        pub_ack_variable_header.set_properties(_properties);
+        pub_ack_variable_header.disconnect_reason_code = disconnect_reason_code;
+        pub_ack_variable_header
+    }
+    pub fn set_properties(&mut self, _properties: Vec<Option<Property>>) {
+        self.properties.set_properties_vec(_properties);
+    }
+    pub fn get_properties(&self) -> Vec<Option<Property>> {
+        self.properties.properties.values().cloned().collect()
+    }
+}
+impl Default for DisconnectVariableHeader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+#[derive(Debug, Default)]
+pub struct AuthControlPacket {
+    pub variable_header: AuthVariableHeader,
+}
+#[derive(Debug)]
+pub struct AuthVariableHeader {
+    pub auth_reason_code: AuthReasonCode,
+    properties: Properties,
+}
+impl AuthVariableHeader {
+    pub fn new() -> Self {
+        let mut properties_map = HashMap::new();
+        properties_map.insert(
+            Property::AuthenticationMethod(String::from("")).to_string(),
+            None,
+        );
+        properties_map.insert(Property::AuthenticationData(Bytes::new()).to_string(), None);
+        properties_map.insert(
+            Property::ResponseInformation(String::from("")).to_string(),
+            None,
+        );
+        properties_map.insert(Property::UserProperty(String::from("")).to_string(), None);
+        let properties = Properties {
+            properties: properties_map,
+        };
+        Self {
+            auth_reason_code: AuthReasonCode::default(),
+            properties,
+        }
+    }
+    pub fn from(auth_reason_code: AuthReasonCode, _properties: Vec<Option<Property>>) -> Self {
+        let mut pub_ack_variable_header = Self::new();
+        pub_ack_variable_header.set_properties(_properties);
+        pub_ack_variable_header.auth_reason_code = auth_reason_code;
+        pub_ack_variable_header
+    }
+    pub fn set_properties(&mut self, _properties: Vec<Option<Property>>) {
+        self.properties.set_properties_vec(_properties);
+    }
+    pub fn get_properties(&self) -> Vec<Option<Property>> {
+        self.properties.properties.values().cloned().collect()
+    }
+}
+impl Default for AuthVariableHeader {
     fn default() -> Self {
         Self::new()
     }
