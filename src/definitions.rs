@@ -196,12 +196,12 @@ impl Default for DisconnectReasonCode {
 #[repr(u8)]
 #[derive(Debug, FromPrimitive, ToPrimitive)]
 #[allow(dead_code)]
-pub enum AuthenticateReasonCode {
+pub enum AuthReasonCode {
     Success = 0,
     ContinueAuthentication = 24,
     ReAuthenticate = 25,
 }
-impl Default for AuthenticateReasonCode {
+impl Default for AuthReasonCode {
     fn default() -> Self {
         Self::Success
     }
