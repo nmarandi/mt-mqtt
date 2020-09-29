@@ -1,9 +1,7 @@
 use crate::definitions::*;
 pub use crate::packet::*;
 use bytes::{Buf, BufMut, BytesMut};
-use std::convert::TryFrom;
-use std::fmt;
-use std::io::Cursor;
+use std::{convert::TryFrom, fmt, io::Cursor};
 mod decoder;
 mod encoder;
 use decoder::*;
@@ -54,13 +52,8 @@ impl Frame {
                 conn_ack_control_packet
                     .variable_header
                     .properties
-                    .push(Some(Property::AssignedClientIdentifier(String::from(
-                        "Assigned",
-                    ))));
-                conn_ack_control_packet
-                    .variable_header
-                    .conn_ack_flag
-                    .session_present_flag = false;
+                    .push(Some(Property::AssignedClientIdentifier(String::from("Assigned"))));
+                conn_ack_control_packet.variable_header.conn_ack_flag.session_present_flag = false;
                 Frame {
                     fix_header: FixHeader::new(control_packet_type, Flags(0, 0, 0, 0)),
                     control_packet: ControlPacket::ConnAck(conn_ack_control_packet),
@@ -87,6 +80,7 @@ impl Frame {
             ControlPacketType::AUTH = 15,*/
         }
     }
+
     pub fn deserialize(src: &mut Cursor<&[u8]>) -> Result<Frame, Error> {
         if src.remaining() < 4 {
             return Err(Error::Incomplete(src.remaining()));
@@ -98,9 +92,7 @@ impl Frame {
         let remianing_lenght = VariableByteInteger::from(src);
         if src.remaining() < usize::try_from(remianing_lenght.data).unwrap() {
             src.set_position(pos);
-            return Err(Error::Incomplete(
-                usize::try_from(remianing_lenght.data).unwrap(),
-            ));
+            return Err(Error::Incomplete(usize::try_from(remianing_lenght.data).unwrap()));
         }
         match fix_header.control_packet_type {
             ControlPacketType::CONNECT => Ok(Frame {
@@ -108,9 +100,7 @@ impl Frame {
                 fix_header,
             }),
             ControlPacketType::PUBLISH => Ok(Frame {
-                control_packet: ControlPacket::Publish(
-                    decode_publish_packet(src, fix_header.flags.1).unwrap(),
-                ),
+                control_packet: ControlPacket::Publish(decode_publish_packet(src, fix_header.flags.1).unwrap()),
                 fix_header,
             }),
             ControlPacketType::PUBREL => Ok(Frame {
@@ -124,6 +114,7 @@ impl Frame {
             _ => Err(Error::Other(format!("Not Implemented yet"))),
         }
     }
+
     pub fn serialize(frame: Frame) -> Result<BytesMut, Error> {
         println!("start serialize: \n{:?}", frame);
         let mut data: BytesMut = BytesMut::new();
@@ -161,7 +152,8 @@ impl From<String> for Error {
     }
 }
 
-impl std::error::Error for Error {}
+impl std::error::Error for Error {
+}
 
 impl fmt::Display for Error {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {

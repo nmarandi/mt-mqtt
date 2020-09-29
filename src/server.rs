@@ -1,6 +1,8 @@
 use crate::client::*;
-use tokio::net::{TcpListener, TcpStream};
-use tokio::prelude::*;
+use tokio::{
+    net::{TcpListener, TcpStream},
+    prelude::*,
+};
 
 const SECURE_TCP_PORT: u32 = 8883;
 const UNSECURE_TCP_PORT: u32 = 1883;
@@ -13,6 +15,7 @@ impl MqttServer {
         println!("Spawning a client");
         Client::new(stream)
     }
+
     pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
         let bind_addr = String::from("0.0.0.0:") + &UNSECURE_TCP_PORT.to_string();
         let mut unsecure_listener = TcpListener::bind(bind_addr.clone()).await?;

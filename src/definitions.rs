@@ -214,14 +214,17 @@ impl VariableByteInteger {
     pub fn new() -> VariableByteInteger {
         VariableByteInteger { data: 0 }
     }
+
     pub fn from(encoded_byte: &mut Cursor<&[u8]>) -> VariableByteInteger {
         VariableByteInteger {
             data: VariableByteInteger::decode(encoded_byte),
         }
     }
+
     pub fn encode(self) -> Vec<u8> {
         VariableByteInteger::encode_u32(self.data)
     }
+
     pub fn encode_u32(data: u32) -> Vec<u8> {
         let mut encoded_bytes: Vec<u8> = Vec::new();
         let mut x = data;
@@ -238,6 +241,7 @@ impl VariableByteInteger {
         }
         encoded_bytes
     }
+
     pub fn decode(encoded_byte: &mut Cursor<&[u8]>) -> u32 {
         let mut multiplier: u32 = 1;
         let mut data = 0;
@@ -323,10 +327,7 @@ pub struct FixHeader {
 }
 impl FixHeader {
     pub fn new(control_packet_type: ControlPacketType, flags: Flags) -> FixHeader {
-        FixHeader {
-            control_packet_type,
-            flags,
-        }
+        FixHeader { control_packet_type, flags }
     }
 }
 pub enum PayloadCondition {

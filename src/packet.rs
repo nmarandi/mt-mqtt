@@ -2,8 +2,7 @@ use crate::definitions::*;
 use bytes::Bytes;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
-use std::collections::HashMap;
-use std::string::ToString;
+use std::{collections::HashMap, string::ToString};
 use strum_macros::Display;
 
 #[derive(Debug, Default)]
@@ -16,6 +15,7 @@ impl Properties {
             *(self.properties.get_mut(&property.to_string()).unwrap()) = Some(property.clone());
         }
     }
+
     pub fn set_properties_vec(&mut self, properties: Vec<Option<Property>>) {
         for property in properties {
             self.set_properties(property);
@@ -110,34 +110,28 @@ impl PublishVariableHeader {
         properties_map.insert(Property::ResponseTopic(String::from("")).to_string(), None);
         properties_map.insert(Property::CorrelationData(Bytes::new()).to_string(), None);
         properties_map.insert(Property::UserProperty(String::from("")).to_string(), None);
-        properties_map.insert(
-            Property::SubscriptionIdentifier(VariableByteInteger::new()).to_string(),
-            None,
-        );
+        properties_map.insert(Property::SubscriptionIdentifier(VariableByteInteger::new()).to_string(), None);
         properties_map.insert(Property::ContentType(String::from("")).to_string(), None);
-        let properties = Properties {
-            properties: properties_map,
-        };
+        let properties = Properties { properties: properties_map };
         Self {
             topic_name: String::from(""),
             packet_identifier: 0,
             properties,
         }
     }
-    pub fn from(
-        topic_name: String,
-        packet_identifier: u16,
-        _properties: Vec<Option<Property>>,
-    ) -> Self {
+
+    pub fn from(topic_name: String, packet_identifier: u16, _properties: Vec<Option<Property>>) -> Self {
         let mut publish_variable_header = Self::new();
         publish_variable_header.set_properties(_properties);
         publish_variable_header.topic_name = topic_name;
         publish_variable_header.packet_identifier = packet_identifier;
         publish_variable_header
     }
+
     pub fn set_properties(&mut self, _properties: Vec<Option<Property>>) {
         self.properties.set_properties_vec(_properties);
     }
+
     pub fn get_properties(&self) -> Vec<Option<Property>> {
         self.properties.properties.values().cloned().collect()
     }
@@ -162,29 +156,26 @@ impl PubAckVariableHeader {
         let mut properties_map = HashMap::new();
         properties_map.insert(Property::ReasonString(String::from("")).to_string(), None);
         properties_map.insert(Property::UserProperty(String::from("")).to_string(), None);
-        let properties = Properties {
-            properties: properties_map,
-        };
+        let properties = Properties { properties: properties_map };
         Self {
             packet_identifier: 0,
             reason_code: PubAckReasonCode::default(),
             properties,
         }
     }
-    pub fn from(
-        packet_identifier: u16,
-        reason_code: PubAckReasonCode,
-        _properties: Vec<Option<Property>>,
-    ) -> Self {
+
+    pub fn from(packet_identifier: u16, reason_code: PubAckReasonCode, _properties: Vec<Option<Property>>) -> Self {
         let mut pub_ack_variable_header = Self::new();
         pub_ack_variable_header.set_properties(_properties);
         pub_ack_variable_header.packet_identifier = packet_identifier;
         pub_ack_variable_header.reason_code = reason_code;
         pub_ack_variable_header
     }
+
     pub fn set_properties(&mut self, _properties: Vec<Option<Property>>) {
         self.properties.set_properties_vec(_properties);
     }
+
     pub fn get_properties(&self) -> Vec<Option<Property>> {
         self.properties.properties.values().cloned().collect()
     }
@@ -209,29 +200,26 @@ impl PubRecVariableHeader {
         let mut properties_map = HashMap::new();
         properties_map.insert(Property::ReasonString(String::from("")).to_string(), None);
         properties_map.insert(Property::UserProperty(String::from("")).to_string(), None);
-        let properties = Properties {
-            properties: properties_map,
-        };
+        let properties = Properties { properties: properties_map };
         Self {
             packet_identifier: 0,
             reason_code: PubRecReasonCode::default(),
             properties,
         }
     }
-    pub fn from(
-        packet_identifier: u16,
-        reason_code: PubRecReasonCode,
-        _properties: Vec<Option<Property>>,
-    ) -> Self {
+
+    pub fn from(packet_identifier: u16, reason_code: PubRecReasonCode, _properties: Vec<Option<Property>>) -> Self {
         let mut pub_ack_variable_header = Self::new();
         pub_ack_variable_header.set_properties(_properties);
         pub_ack_variable_header.packet_identifier = packet_identifier;
         pub_ack_variable_header.reason_code = reason_code;
         pub_ack_variable_header
     }
+
     pub fn set_properties(&mut self, _properties: Vec<Option<Property>>) {
         self.properties.set_properties_vec(_properties);
     }
+
     pub fn get_properties(&self) -> Vec<Option<Property>> {
         self.properties.properties.values().cloned().collect()
     }
@@ -256,29 +244,26 @@ impl PubRelVariableHeader {
         let mut properties_map = HashMap::new();
         properties_map.insert(Property::ReasonString(String::from("")).to_string(), None);
         properties_map.insert(Property::UserProperty(String::from("")).to_string(), None);
-        let properties = Properties {
-            properties: properties_map,
-        };
+        let properties = Properties { properties: properties_map };
         Self {
             packet_identifier: 0,
             reason_code: PubRelReasonCode::default(),
             properties,
         }
     }
-    pub fn from(
-        packet_identifier: u16,
-        reason_code: PubRelReasonCode,
-        _properties: Vec<Option<Property>>,
-    ) -> Self {
+
+    pub fn from(packet_identifier: u16, reason_code: PubRelReasonCode, _properties: Vec<Option<Property>>) -> Self {
         let mut pub_ack_variable_header = Self::new();
         pub_ack_variable_header.set_properties(_properties);
         pub_ack_variable_header.packet_identifier = packet_identifier;
         pub_ack_variable_header.reason_code = reason_code;
         pub_ack_variable_header
     }
+
     pub fn set_properties(&mut self, _properties: Vec<Option<Property>>) {
         self.properties.set_properties_vec(_properties);
     }
+
     pub fn get_properties(&self) -> Vec<Option<Property>> {
         self.properties.properties.values().cloned().collect()
     }
@@ -303,29 +288,26 @@ impl PubCompVariableHeader {
         let mut properties_map = HashMap::new();
         properties_map.insert(Property::ReasonString(String::from("")).to_string(), None);
         properties_map.insert(Property::UserProperty(String::from("")).to_string(), None);
-        let properties = Properties {
-            properties: properties_map,
-        };
+        let properties = Properties { properties: properties_map };
         Self {
             packet_identifier: 0,
             reason_code: PubCompReasonCode::default(),
             properties,
         }
     }
-    pub fn from(
-        packet_identifier: u16,
-        reason_code: PubCompReasonCode,
-        _properties: Vec<Option<Property>>,
-    ) -> Self {
+
+    pub fn from(packet_identifier: u16, reason_code: PubCompReasonCode, _properties: Vec<Option<Property>>) -> Self {
         let mut pub_ack_variable_header = Self::new();
         pub_ack_variable_header.set_properties(_properties);
         pub_ack_variable_header.packet_identifier = packet_identifier;
         pub_ack_variable_header.reason_code = reason_code;
         pub_ack_variable_header
     }
+
     pub fn set_properties(&mut self, _properties: Vec<Option<Property>>) {
         self.properties.set_properties_vec(_properties);
     }
+
     pub fn get_properties(&self) -> Vec<Option<Property>> {
         self.properties.properties.values().cloned().collect()
     }
@@ -384,34 +366,28 @@ pub struct SubscribeVariableHeader {
 impl SubscribeVariableHeader {
     pub fn new() -> Self {
         let mut properties_map = HashMap::new();
-        properties_map.insert(
-            Property::SubscriptionIdentifier(VariableByteInteger::new()).to_string(),
-            None,
-        );
+        properties_map.insert(Property::SubscriptionIdentifier(VariableByteInteger::new()).to_string(), None);
         properties_map.insert(Property::UserProperty(String::from("")).to_string(), None);
-        let properties = Properties {
-            properties: properties_map,
-        };
+        let properties = Properties { properties: properties_map };
         Self {
             packet_identifier: 0,
             subscribe_payload: Vec::new(),
             properties,
         }
     }
-    pub fn from(
-        packet_identifier: u16,
-        subscribe_payload: Vec<SubscribePayload>,
-        _properties: Vec<Option<Property>>,
-    ) -> Self {
+
+    pub fn from(packet_identifier: u16, subscribe_payload: Vec<SubscribePayload>, _properties: Vec<Option<Property>>) -> Self {
         let mut pub_ack_variable_header = Self::new();
         pub_ack_variable_header.set_properties(_properties);
         pub_ack_variable_header.packet_identifier = packet_identifier;
         pub_ack_variable_header.subscribe_payload = subscribe_payload;
         pub_ack_variable_header
     }
+
     pub fn set_properties(&mut self, _properties: Vec<Option<Property>>) {
         self.properties.set_properties_vec(_properties);
     }
+
     pub fn get_properties(&self) -> Vec<Option<Property>> {
         self.properties.properties.values().cloned().collect()
     }
@@ -438,34 +414,28 @@ pub struct SubAckVariableHeader {
 impl SubAckVariableHeader {
     pub fn new() -> Self {
         let mut properties_map = HashMap::new();
-        properties_map.insert(
-            Property::SubscriptionIdentifier(VariableByteInteger::new()).to_string(),
-            None,
-        );
+        properties_map.insert(Property::SubscriptionIdentifier(VariableByteInteger::new()).to_string(), None);
         properties_map.insert(Property::UserProperty(String::from("")).to_string(), None);
-        let properties = Properties {
-            properties: properties_map,
-        };
+        let properties = Properties { properties: properties_map };
         Self {
             packet_identifier: 0,
             sub_ack_payload: Default::default(),
             properties,
         }
     }
-    pub fn from(
-        packet_identifier: u16,
-        sub_ack_payload: SubAckPayload,
-        _properties: Vec<Option<Property>>,
-    ) -> Self {
+
+    pub fn from(packet_identifier: u16, sub_ack_payload: SubAckPayload, _properties: Vec<Option<Property>>) -> Self {
         let mut pub_ack_variable_header = Self::new();
         pub_ack_variable_header.set_properties(_properties);
         pub_ack_variable_header.packet_identifier = packet_identifier;
         pub_ack_variable_header.sub_ack_payload = sub_ack_payload;
         pub_ack_variable_header
     }
+
     pub fn set_properties(&mut self, _properties: Vec<Option<Property>>) {
         self.properties.set_properties_vec(_properties);
     }
+
     pub fn get_properties(&self) -> Vec<Option<Property>> {
         self.properties.properties.values().cloned().collect()
     }
@@ -492,26 +462,24 @@ impl UnsubscribeVariableHeader {
     pub fn new() -> Self {
         let mut properties_map = HashMap::new();
         properties_map.insert(Property::UserProperty(String::from("")).to_string(), None);
-        let properties = Properties {
-            properties: properties_map,
-        };
+        let properties = Properties { properties: properties_map };
         Self {
             unsubscribe_payload: UnsubscribePayload::default(),
             properties,
         }
     }
-    pub fn from(
-        unsubscribe_payload: UnsubscribePayload,
-        _properties: Vec<Option<Property>>,
-    ) -> Self {
+
+    pub fn from(unsubscribe_payload: UnsubscribePayload, _properties: Vec<Option<Property>>) -> Self {
         let mut pub_ack_variable_header = Self::new();
         pub_ack_variable_header.set_properties(_properties);
         pub_ack_variable_header.unsubscribe_payload = unsubscribe_payload;
         pub_ack_variable_header
     }
+
     pub fn set_properties(&mut self, _properties: Vec<Option<Property>>) {
         self.properties.set_properties_vec(_properties);
     }
+
     pub fn get_properties(&self) -> Vec<Option<Property>> {
         self.properties.properties.values().cloned().collect()
     }
@@ -539,23 +507,24 @@ impl UnsubAckVariableHeader {
         let mut properties_map = HashMap::new();
         properties_map.insert(Property::ReasonString(String::from("")).to_string(), None);
         properties_map.insert(Property::UserProperty(String::from("")).to_string(), None);
-        let properties = Properties {
-            properties: properties_map,
-        };
+        let properties = Properties { properties: properties_map };
         Self {
             unsub_ack_payload: UnsubAckPayload::default(),
             properties,
         }
     }
+
     pub fn from(unsub_ack_payload: UnsubAckPayload, _properties: Vec<Option<Property>>) -> Self {
         let mut pub_ack_variable_header = Self::new();
         pub_ack_variable_header.set_properties(_properties);
         pub_ack_variable_header.unsub_ack_payload = unsub_ack_payload;
         pub_ack_variable_header
     }
+
     pub fn set_properties(&mut self, _properties: Vec<Option<Property>>) {
         self.properties.set_properties_vec(_properties);
     }
+
     pub fn get_properties(&self) -> Vec<Option<Property>> {
         self.properties.properties.values().cloned().collect()
     }
@@ -580,30 +549,25 @@ impl DisconnectVariableHeader {
         properties_map.insert(Property::SessionExpiryInterval(0).to_string(), None);
         properties_map.insert(Property::ReasonString(String::from("")).to_string(), None);
         properties_map.insert(Property::UserProperty(String::from("")).to_string(), None);
-        properties_map.insert(
-            Property::ServerReference(String::from("")).to_string(),
-            None,
-        );
-        let properties = Properties {
-            properties: properties_map,
-        };
+        properties_map.insert(Property::ServerReference(String::from("")).to_string(), None);
+        let properties = Properties { properties: properties_map };
         Self {
             disconnect_reason_code: DisconnectReasonCode::default(),
             properties,
         }
     }
-    pub fn from(
-        disconnect_reason_code: DisconnectReasonCode,
-        _properties: Vec<Option<Property>>,
-    ) -> Self {
+
+    pub fn from(disconnect_reason_code: DisconnectReasonCode, _properties: Vec<Option<Property>>) -> Self {
         let mut pub_ack_variable_header = Self::new();
         pub_ack_variable_header.set_properties(_properties);
         pub_ack_variable_header.disconnect_reason_code = disconnect_reason_code;
         pub_ack_variable_header
     }
+
     pub fn set_properties(&mut self, _properties: Vec<Option<Property>>) {
         self.properties.set_properties_vec(_properties);
     }
+
     pub fn get_properties(&self) -> Vec<Option<Property>> {
         self.properties.properties.values().cloned().collect()
     }
@@ -625,33 +589,28 @@ pub struct AuthVariableHeader {
 impl AuthVariableHeader {
     pub fn new() -> Self {
         let mut properties_map = HashMap::new();
-        properties_map.insert(
-            Property::AuthenticationMethod(String::from("")).to_string(),
-            None,
-        );
+        properties_map.insert(Property::AuthenticationMethod(String::from("")).to_string(), None);
         properties_map.insert(Property::AuthenticationData(Bytes::new()).to_string(), None);
-        properties_map.insert(
-            Property::ResponseInformation(String::from("")).to_string(),
-            None,
-        );
+        properties_map.insert(Property::ResponseInformation(String::from("")).to_string(), None);
         properties_map.insert(Property::UserProperty(String::from("")).to_string(), None);
-        let properties = Properties {
-            properties: properties_map,
-        };
+        let properties = Properties { properties: properties_map };
         Self {
             auth_reason_code: AuthReasonCode::default(),
             properties,
         }
     }
+
     pub fn from(auth_reason_code: AuthReasonCode, _properties: Vec<Option<Property>>) -> Self {
         let mut pub_ack_variable_header = Self::new();
         pub_ack_variable_header.set_properties(_properties);
         pub_ack_variable_header.auth_reason_code = auth_reason_code;
         pub_ack_variable_header
     }
+
     pub fn set_properties(&mut self, _properties: Vec<Option<Property>>) {
         self.properties.set_properties_vec(_properties);
     }
+
     pub fn get_properties(&self) -> Vec<Option<Property>> {
         self.properties.properties.values().cloned().collect()
     }

@@ -1,6 +1,4 @@
-use crate::definitions::*;
-use crate::frame::Error;
-use crate::packet::*;
+use crate::{definitions::*, frame::Error, packet::*};
 use bytes::{Buf, Bytes, BytesMut};
 use num_traits::FromPrimitive;
 use std::io::Cursor;
@@ -23,16 +21,10 @@ pub fn decode_fix_header(src: &mut Cursor<&[u8]>) -> Option<FixHeader> {
 pub fn decode_connect_packet(src: &mut Cursor<&[u8]>) -> Result<ConnectControlPacket, Error> {
     let mut connect_control_packet: ConnectControlPacket = Default::default();
     connect_control_packet.variable_header = decode_connect_variable_header(src).unwrap();
-    connect_control_packet.payload = decode_connect_payload(
-        src,
-        connect_control_packet.variable_header.connect_flag.clone(),
-    )
-    .unwrap();
+    connect_control_packet.payload = decode_connect_payload(src, connect_control_packet.variable_header.connect_flag.clone()).unwrap();
     Ok(connect_control_packet)
 }
-pub fn decode_connect_variable_header(
-    src: &mut Cursor<&[u8]>,
-) -> Result<ConnectVariableHeader, Error> {
+pub fn decode_connect_variable_header(src: &mut Cursor<&[u8]>) -> Result<ConnectVariableHeader, Error> {
     let mut connect_variable_header: ConnectVariableHeader = Default::default();
     connect_variable_header.protocol_name = decode_string(src).unwrap();
     connect_variable_header.protocol_version = src.get_u8();
@@ -41,10 +33,7 @@ pub fn decode_connect_variable_header(
     connect_variable_header.properties = decode_properties(src).unwrap();
     Ok(connect_variable_header)
 }
-pub fn decode_connect_payload(
-    src: &mut Cursor<&[u8]>,
-    connect_flag: ConnectFlags,
-) -> Result<ConnectPayload, Error> {
+pub fn decode_connect_payload(src: &mut Cursor<&[u8]>, connect_flag: ConnectFlags) -> Result<ConnectPayload, Error> {
     let mut connect_payload: ConnectPayload = Default::default();
     connect_payload.client_identifier = decode_string(src).unwrap();
     if connect_flag.will_flag {
@@ -61,19 +50,13 @@ pub fn decode_connect_payload(
     Ok(connect_payload)
 }
 
-pub fn decode_publish_packet(
-    src: &mut Cursor<&[u8]>,
-    qos: u8,
-) -> Result<PublishControlPacket, Error> {
+pub fn decode_publish_packet(src: &mut Cursor<&[u8]>, qos: u8) -> Result<PublishControlPacket, Error> {
     let mut publish_control_packet: PublishControlPacket = Default::default();
     publish_control_packet.variable_header = decode_publish_variable_header(src, qos).unwrap();
     publish_control_packet.payload = decode_publish_payload(src).unwrap();
     Ok(publish_control_packet)
 }
-pub fn decode_publish_variable_header(
-    src: &mut Cursor<&[u8]>,
-    qos: u8,
-) -> Result<PublishVariableHeader, Error> {
+pub fn decode_publish_variable_header(src: &mut Cursor<&[u8]>, qos: u8) -> Result<PublishVariableHeader, Error> {
     let mut publish_variable_header: PublishVariableHeader = Default::default();
     publish_variable_header.topic_name = decode_string(src).unwrap();
     if qos > 0 {
@@ -95,9 +78,7 @@ pub fn decode_pub_rel_packet(src: &mut Cursor<&[u8]>) -> Result<PubRelControlPac
     pub_rel_control_packet.variable_header = decode_pub_rel_variable_header(src).unwrap();
     Ok(pub_rel_control_packet)
 }
-pub fn decode_pub_rel_variable_header(
-    src: &mut Cursor<&[u8]>,
-) -> Result<PubRelVariableHeader, Error> {
+pub fn decode_pub_rel_variable_header(src: &mut Cursor<&[u8]>) -> Result<PubRelVariableHeader, Error> {
     let mut pub_rel_variable_header: PubRelVariableHeader = Default::default();
     pub_rel_variable_header.packet_identifier = src.get_u16();
     if src.has_remaining() {
@@ -116,9 +97,7 @@ pub fn decode_subscribe_packet(src: &mut Cursor<&[u8]>) -> Result<SubscribeContr
     pub_rel_control_packet.variable_header = decode_subscribe_variable_header(src).unwrap();
     Ok(pub_rel_control_packet)
 }
-pub fn decode_subscribe_variable_header(
-    src: &mut Cursor<&[u8]>,
-) -> Result<SubscribeVariableHeader, Error> {
+pub fn decode_subscribe_variable_header(src: &mut Cursor<&[u8]>) -> Result<SubscribeVariableHeader, Error> {
     let mut subscribe_variable_header: SubscribeVariableHeader = Default::default();
     subscribe_variable_header.packet_identifier = src.get_u16();
     subscribe_variable_header.set_properties(decode_properties(src).unwrap());
@@ -159,8 +138,7 @@ pub fn decode_binary_data(src: &mut Cursor<&[u8]>) -> Result<Bytes, Error> {
 
     let position = src.position() as usize;
 
-    let payload_bytes =
-        BytesMut::from(&src.get_ref()[position..(position + data_size_bytes)]).freeze();
+    let payload_bytes = BytesMut::from(&src.get_ref()[position..(position + data_size_bytes)]).freeze();
     let result = Ok(payload_bytes);
     src.advance(data_size_bytes);
 

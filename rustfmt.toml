@@ -1,0 +1,4 @@
+max_width = 150
+merge_imports = true
+reorder_impl_items = true
+empty_item_single_line = false

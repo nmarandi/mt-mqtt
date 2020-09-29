@@ -1,16 +1,9 @@
-use crate::definitions::*;
-use crate::packet::*;
+use crate::{definitions::*, packet::*};
 use bytes::{BufMut, Bytes, BytesMut};
 use num_traits::ToPrimitive;
 
 pub fn encode_fix_header(src: FixHeader, bytes: &mut BytesMut) {
-    bytes.put_u8(
-        (src.control_packet_type.to_u8().unwrap() << 4)
-            | src.flags.0
-            | (src.flags.1 << 1)
-            | (src.flags.2 << 2)
-            | (src.flags.3 << 3),
-    );
+    bytes.put_u8((src.control_packet_type.to_u8().unwrap() << 4) | src.flags.0 | (src.flags.1 << 1) | (src.flags.2 << 2) | (src.flags.3 << 3));
 }
 pub fn encode_conn_ack_packet(src: ConnAckControlPacket, bytes: &mut BytesMut) {
     bytes.put_u8(src.variable_header.conn_ack_flag.session_present_flag as u8);
