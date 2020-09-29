@@ -97,7 +97,7 @@ impl Client {
                             1 => {
                                 let pub_ack_control_packet = PubAckControlPacket {
                                     variable_header: PubAckVariableHeader::from(
-                                        control_packet.variable_header.packet_identifier,
+                                        control_packet.variable_header.packet_identifier.unwrap(),
                                         PubAckReasonCode::Success,
                                         Vec::new(),
                                     ),
@@ -111,7 +111,7 @@ impl Client {
                             2 => {
                                 let pub_rec_control_packet = PubRecControlPacket {
                                     variable_header: PubRecVariableHeader::from(
-                                        control_packet.variable_header.packet_identifier,
+                                        control_packet.variable_header.packet_identifier.unwrap(),
                                         PubRecReasonCode::Success,
                                         Vec::new(),
                                     ),

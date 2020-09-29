@@ -60,8 +60,10 @@ pub fn decode_publish_variable_header(src: &mut Cursor<&[u8]>, qos: u8) -> Resul
     let mut publish_variable_header: PublishVariableHeader = Default::default();
     publish_variable_header.topic_name = decode_string(src).unwrap();
     if qos > 0 {
-        publish_variable_header.packet_identifier = src.get_u16();
-    };
+        publish_variable_header.packet_identifier = Some(src.get_u16());
+    } else {
+        publish_variable_header.packet_identifier = None;
+    }
     publish_variable_header.set_properties(decode_properties(src).unwrap());
     Ok(publish_variable_header)
 }

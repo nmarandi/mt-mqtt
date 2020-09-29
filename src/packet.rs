@@ -98,7 +98,7 @@ pub struct PublishPayload {
 #[derive(Debug)]
 pub struct PublishVariableHeader {
     pub topic_name: String,
-    pub packet_identifier: u16,
+    pub packet_identifier: Option<u16>,
     properties: Properties,
 }
 impl PublishVariableHeader {
@@ -115,12 +115,12 @@ impl PublishVariableHeader {
         let properties = Properties { properties: properties_map };
         Self {
             topic_name: String::from(""),
-            packet_identifier: 0,
+            packet_identifier: None,
             properties,
         }
     }
 
-    pub fn from(topic_name: String, packet_identifier: u16, _properties: Vec<Option<Property>>) -> Self {
+    pub fn from(topic_name: String, packet_identifier: Option<u16>, _properties: Vec<Option<Property>>) -> Self {
         let mut publish_variable_header = Self::new();
         publish_variable_header.set_properties(_properties);
         publish_variable_header.topic_name = topic_name;
