@@ -156,6 +156,9 @@ impl Client {
                             };
                             self.write_value(&mut Frame::serialize(pub_ack).unwrap()).await.unwrap()
                         }
+                        ControlPacket::PingReq => {
+                            self.write_value(&mut Frame::serialize(Frame::new(ControlPacketType::PINGRESP)).unwrap()).await.unwrap()
+                        }
                         _ => break,
                     }
                 }

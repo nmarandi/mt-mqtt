@@ -67,6 +67,10 @@ impl Frame {
                 fix_header: FixHeader::new(control_packet_type, Flags(0, 0, 0, 0)),
                 control_packet: ControlPacket::PubRec(Default::default()),
             },
+            ControlPacketType::PINGRESP => Frame {
+                fix_header: FixHeader::new(control_packet_type, Flags(0, 0, 0, 0)),
+                control_packet: ControlPacket::PingResp
+            },
             _ => panic!("not implemented yet"),
             /*ControlPacketType::PUBREL = 6,
             ControlPacketType::PUBCOMP = 7,
@@ -75,14 +79,13 @@ impl Frame {
             ControlPacketType::UNSUBSCRIBE = 10,
             ControlPacketType::UNSUBACK = 11,
             ControlPacketType::PINGREQ = 12,
-            ControlPacketType::PINGRESP = 13,
             ControlPacketType::DISCONNECT = 14,
             ControlPacketType::AUTH = 15,*/
         }
     }
 
     pub fn deserialize(src: &mut Cursor<&[u8]>) -> Result<Frame, Error> {
-        if src.remaining() < 4 {
+        if src.remaining() < 2 {
             return Err(Error::Incomplete(src.remaining()));
         }
         println!("start deserialize");
@@ -111,6 +114,14 @@ impl Frame {
                 control_packet: ControlPacket::Subscribe(decode_subscribe_packet(src).unwrap()),
                 fix_header,
             }),
+            ControlPacketType::DISCONNECT => Ok(Frame {
+                control_packet: ControlPacket::Disconnect(decode_disconnect_packet(src).unwrap()),
+                fix_header,
+            }),
+            ControlPacketType::PINGREQ => Ok(Frame {
+                control_packet: ControlPacket::PingReq,
+                fix_header,
+            }),
             _ => Err(Error::Other(format!("Not Implemented yet"))),
         }
     }
@@ -136,6 +147,7 @@ impl Frame {
             ControlPacket::SubAck(control_packet) => {
                 encode_sub_ack_packet(control_packet, &mut src);
             }
+            ControlPacket::PingResp => (),
             _ => {
                 return Err(Error::Other(format!("Not Implemented yet")));
             }
