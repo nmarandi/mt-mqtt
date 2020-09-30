@@ -117,6 +117,24 @@ pub fn decode_subscribe_payload(src: &mut Cursor<&[u8]>) -> Result<Vec<Subscribe
     Ok(subscribe_payload)
 }
 
+pub fn decode_disconnect_packet(src: &mut Cursor<&[u8]>) -> Result<DisconnectControlPacket, Error> {
+    let mut pub_rel_control_packet: DisconnectControlPacket = Default::default();
+    pub_rel_control_packet.variable_header = decode_disconnect_variable_header(src).unwrap();
+    Ok(pub_rel_control_packet)
+}
+pub fn decode_disconnect_variable_header(src: &mut Cursor<&[u8]>) -> Result<DisconnectVariableHeader, Error> {
+    let mut disconnect_variable_header: DisconnectVariableHeader = Default::default();
+    if src.has_remaining() {
+        disconnect_variable_header.disconnect_reason_code = DisconnectReasonCode::from_u8(src.get_u8()).unwrap();
+        if src.has_remaining() {
+            disconnect_variable_header.set_properties(decode_properties(src).unwrap());
+        }
+    } else {
+        disconnect_variable_header.disconnect_reason_code = DisconnectReasonCode::NormalDisconnection;
+    }
+    Ok(disconnect_variable_header)
+}
+
 pub fn decode_subscription_options(src: &mut Cursor<&[u8]>) -> Result<SubscriptionOptions, Error> {
     Ok(SubscriptionOptions::new(src.get_u8()))
 }
