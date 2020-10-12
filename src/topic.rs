@@ -52,6 +52,8 @@ impl TopicTree {
         if !topic_str.is_empty() {
             if topic_str == "#" {
                 self.multi_level_topic_subscribers_id.insert(String::from(topic_subscriber_id.as_ref()));
+            } else if topic_str == "+" {
+                self.single_level_topic_subscribers_id.insert(String::from(topic_subscriber_id.as_ref()));
             } else if splitted_topic.len() > 1 {
                 match self.sub_topics.entry(topic_str) {
                     Entry::Occupied(o) => o.into_mut().subscribe(splitted_topic[1].to_string(), topic_subscriber_id),
@@ -74,6 +76,17 @@ impl TopicTree {
                     }
                 }
             }
+            if self.single_level_topic_subscribers_id.len() > 0 {
+                for (_, elem) in self.sub_topics.iter_mut() {
+                    for multi_ids in self.single_level_topic_subscribers_id.iter() {
+                        if splitted_topic.len() > 1 {
+                            elem.subscribe(splitted_topic[1].to_string(), multi_ids);
+                        } else {
+                            elem.subscribe("", multi_ids);
+                        }
+                    }
+                }
+            }
         } else {
             self.topic_subscribers_id.insert(String::from(topic_subscriber_id.as_ref()));
         }
@@ -83,13 +96,11 @@ impl TopicTree {
         if topic_str.as_ref().is_empty() {
             return match self.topic_subscribers_id.len() + self.multi_level_topic_subscribers_id.len() {
                 0 => None,
-                _ => Some(
-                    self.topic_subscribers_id
-                        .clone()
-                        .into_iter()
-                        .chain(self.multi_level_topic_subscribers_id.clone())
-                        .collect(),
-                ),
+                _ => {
+                    let mut all_subscriber = self.topic_subscribers_id.clone();
+                    all_subscriber.extend(self.multi_level_topic_subscribers_id.clone());
+                    Some(all_subscriber.into_iter().collect())
+                }
             };
         } else {
             let splitted_topic: Vec<&str> = topic_str.as_ref().splitn(2, "/").collect();
@@ -124,7 +135,9 @@ mod tests {
         root_topic.subscribe("a/g/#", "observer#");
         root_topic.subscribe("d/g/a", "observer5");
         root_topic.subscribe("b/a/a", "observer6");
-        root_topic.subscribe("#", "observer root");
+        root_topic.subscribe("a/#", "observer root");
+        root_topic.subscribe("a/+/z", "observer +");
+        root_topic.subscribe("+/+/#", "observer +#");
         //println!("{:#?}", root_topic);
         println!("{:#?}", root_topic.get_subscribers_id("a/b/c"));
         println!("{:#?}", root_topic.get_subscribers_id("a/g"));
@@ -133,12 +146,9 @@ mod tests {
         println!("{:#?}", root_topic.get_subscribers_id("a/g/e"));
         println!("{:#?}", root_topic.get_subscribers_id("a/g/m"));
         println!("{:#?}", root_topic.get_subscribers_id("hello/beto"));
+        println!("{:#?}", root_topic.get_subscribers_id("a/g/z"));
+        println!("{:#?}", root_topic.get_subscribers_id("a/b/z"));
         let duration = start.elapsed();
         println!("Time elapsed in topic_test() is: {:?}", duration);
-    }
-    #[test]
-    fn splitn_test() {
-        let datas: Vec<&str> = "hello".splitn(2, "/").collect();
-        println!("{:#?}", datas);
     }
 }
