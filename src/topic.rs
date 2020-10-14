@@ -14,13 +14,12 @@ pub struct TopicTree {
 
 impl TopicTree {
     pub fn new_root() -> TopicTree {
-        let topic = TopicTree {
+        TopicTree {
             sub_topics: HashMap::new(),
             topic_subscribers_id: HashSet::new(),
             multi_level_topic_subscribers_id: HashSet::new(),
             single_level_topic_subscribers_id: HashSet::new(),
-        };
-        topic
+        }
     }
 
     fn new<S1: AsRef<str>, S2: AsRef<str>>(topic_str: S1, topic_subscriber_id: S2) -> TopicTree {
@@ -30,7 +29,7 @@ impl TopicTree {
             multi_level_topic_subscribers_id: HashSet::new(),
             single_level_topic_subscribers_id: HashSet::new(),
         };
-        let splitted_topic: Vec<&str> = topic_str.as_ref().splitn(2, "/").collect();
+        let splitted_topic: Vec<&str> = topic_str.as_ref().splitn(2, '/').collect();
         let topic_str = splitted_topic[0].to_string();
         if !topic_str.is_empty() {
             if splitted_topic.len() > 1 {
@@ -47,7 +46,7 @@ impl TopicTree {
     }
 
     pub fn subscribe<S1: AsRef<str>, S2: AsRef<str>>(&mut self, topic_str: S1, topic_subscriber_id: S2) {
-        let splitted_topic: Vec<&str> = topic_str.as_ref().splitn(2, "/").collect();
+        let splitted_topic: Vec<&str> = topic_str.as_ref().splitn(2, '/').collect();
         let topic_str = splitted_topic[0].to_string();
         if !topic_str.is_empty() {
             if topic_str == "#" {
@@ -69,14 +68,14 @@ impl TopicTree {
                     }
                 }
             }
-            if self.multi_level_topic_subscribers_id.len() > 0 {
+            if !self.multi_level_topic_subscribers_id.is_empty() {
                 for (_, elem) in self.sub_topics.iter_mut() {
                     for multi_ids in self.multi_level_topic_subscribers_id.iter() {
                         elem.subscribe("#", multi_ids);
                     }
                 }
             }
-            if self.single_level_topic_subscribers_id.len() > 0 {
+            if !self.single_level_topic_subscribers_id.is_empty() {
                 for (_, elem) in self.sub_topics.iter_mut() {
                     for multi_ids in self.single_level_topic_subscribers_id.iter() {
                         if splitted_topic.len() > 1 {
@@ -94,16 +93,16 @@ impl TopicTree {
 
     fn get_subscribers_id<S: AsRef<str>>(&mut self, topic_str: S) -> Option<Vec<String>> {
         if topic_str.as_ref().is_empty() {
-            return match self.topic_subscribers_id.len() + self.multi_level_topic_subscribers_id.len() {
+            match self.topic_subscribers_id.len() + self.multi_level_topic_subscribers_id.len() {
                 0 => None,
                 _ => {
                     let mut all_subscriber = self.topic_subscribers_id.clone();
                     all_subscriber.extend(self.multi_level_topic_subscribers_id.clone());
                     Some(all_subscriber.into_iter().collect())
                 }
-            };
+            }
         } else {
-            let splitted_topic: Vec<&str> = topic_str.as_ref().splitn(2, "/").collect();
+            let splitted_topic: Vec<&str> = topic_str.as_ref().splitn(2, '/').collect();
             if splitted_topic.len() > 1 {
                 return self.sub_topics.get_mut(splitted_topic[0]).unwrap().get_subscribers_id(splitted_topic[1]);
             } else {

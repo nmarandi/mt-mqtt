@@ -230,12 +230,12 @@ impl VariableByteInteger {
         let mut x = data;
         loop {
             let mut encoded_byte = (((x % 128) + 128) % 128) as u8;
-            x = x / 128;
+            x /= 128;
             if x == 0 {
                 encoded_bytes.push(encoded_byte);
                 break;
             } else {
-                encoded_byte = encoded_byte | 128
+                encoded_byte |= 128;
             }
             encoded_bytes.push(encoded_byte);
         }
@@ -310,11 +310,7 @@ pub fn have_packet_identifier(fix_header: FixHeader) -> bool {
         | ControlPacketType::UNSUBSCRIBE
         | ControlPacketType::UNSUBACK => true,
         ControlPacketType::PUBLISH => {
-            if fix_header.flags.1 > 0 {
-                return true;
-            } else {
-                return false;
-            }
+            fix_header.flags.1 > 0 
         }
     }
 }

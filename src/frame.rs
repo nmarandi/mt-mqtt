@@ -69,7 +69,7 @@ impl Frame {
             },
             ControlPacketType::PINGRESP => Frame {
                 fix_header: FixHeader::new(control_packet_type, Flags(0, 0, 0, 0)),
-                control_packet: ControlPacket::PingResp
+                control_packet: ControlPacket::PingResp,
             },
             _ => panic!("not implemented yet"),
             /*ControlPacketType::PUBREL = 6,
@@ -122,7 +122,7 @@ impl Frame {
                 control_packet: ControlPacket::PingReq,
                 fix_header,
             }),
-            _ => Err(Error::Other(format!("Not Implemented yet"))),
+            _ => Err(Error::Other("Not Implemented yet".to_string())),
         }
     }
 
@@ -149,7 +149,7 @@ impl Frame {
             }
             ControlPacket::PingResp => (),
             _ => {
-                return Err(Error::Other(format!("Not Implemented yet")));
+                return Err(Error::Other("Not Implemented yet".to_string()));
             }
         };
         data.put_slice(&VariableByteInteger::encode_u32(src.len() as u32));
@@ -160,7 +160,7 @@ impl Frame {
 
 impl From<String> for Error {
     fn from(src: String) -> Error {
-        Error::Other(src.into())
+        Error::Other(src)
     }
 }
 

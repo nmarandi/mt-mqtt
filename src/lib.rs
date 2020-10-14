@@ -4,6 +4,7 @@ mod definitions;
 mod frame;
 mod packet;
 mod server;
+pub mod topic;
 extern crate strum;
 extern crate strum_macros;
 

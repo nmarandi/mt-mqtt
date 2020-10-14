@@ -71,7 +71,7 @@ impl Client {
             // Not enough data has been buffered
             Err(Error::Incomplete(_)) => Ok(None),
             // An error was encountered
-            Err(e) => Err(e.into()),
+            Err(e) => Err(e),
         }
     }
 
@@ -156,9 +156,10 @@ impl Client {
                             };
                             self.write_value(&mut Frame::serialize(pub_ack).unwrap()).await.unwrap()
                         }
-                        ControlPacket::PingReq => {
-                            self.write_value(&mut Frame::serialize(Frame::new(ControlPacketType::PINGRESP)).unwrap()).await.unwrap()
-                        }
+                        ControlPacket::PingReq => self
+                            .write_value(&mut Frame::serialize(Frame::new(ControlPacketType::PINGRESP)).unwrap())
+                            .await
+                            .unwrap(),
                         _ => break,
                     }
                 }

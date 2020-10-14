@@ -150,7 +150,7 @@ pub fn decode_string(src: &mut Cursor<&[u8]>) -> Result<String, Error> {
             src.advance(str_size_bytes);
             Ok(string)
         }
-        Err(_) => Err(Error::Other(format!("decode string err"))),
+        Err(_) => Err(Error::Other("decode string err".to_string())),
     }
 }
 pub fn decode_binary_data(src: &mut Cursor<&[u8]>) -> Result<Bytes, Error> {

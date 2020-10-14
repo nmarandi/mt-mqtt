@@ -158,7 +158,7 @@ pub fn encode_property(src: &Property, bytes: &mut BytesMut) {
         }
     };
 }
-pub fn encode_string(src: &String, bytes: &mut BytesMut) {
+pub fn encode_string(src: &str, bytes: &mut BytesMut) {
     bytes.put_u16(src.len() as u16);
     bytes.put_slice(src.as_bytes());
 }
