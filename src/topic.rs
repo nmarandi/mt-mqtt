@@ -121,7 +121,7 @@ impl TopicTree {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{Duration, Instant};
+    use std::time::Instant;
     #[test]
     fn topic_test() {
         let start = Instant::now();

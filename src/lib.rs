@@ -1,4 +1,3 @@
-#![feature(arbitrary_enum_discriminant)]
 mod client;
 mod definitions;
 mod frame;

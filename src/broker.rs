@@ -4,10 +4,10 @@ use tokio::sync::mpsc::{self, Receiver, Sender};
 
 #[derive(Debug)]
 pub enum BrokerMessage {
-    AddPublisher(Client);
-    AddSubscriber(Client);
-    RemovePublisher(Client);
-    RemoveSubscriber(Client);
+    AddPublisher(Client),
+    AddSubscriber(Client),
+    RemovePublisher(Client),
+    RemoveSubscriber(Client),
 }
 
 

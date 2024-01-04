@@ -245,7 +245,6 @@ impl VariableByteInteger {
     pub fn decode(encoded_byte: &mut Cursor<&[u8]>) -> u32 {
         let mut multiplier: u32 = 1;
         let mut data = 0;
-        let mut i = 0;
         loop {
             let read_byte = encoded_byte.get_u8();
             data += (read_byte & 127) as u32 * multiplier;
@@ -256,7 +255,6 @@ impl VariableByteInteger {
             if (read_byte & 128) == 0 {
                 break;
             }
-            i += 1;
         }
         data
     }
