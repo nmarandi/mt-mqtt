@@ -4,7 +4,7 @@ use std::io::Cursor;
 use strum_macros::Display;
 
 #[repr(u8)]
-#[derive(Debug, FromPrimitive, ToPrimitive)]
+#[derive(Debug, Clone, Copy, FromPrimitive, ToPrimitive, PartialEq)]
 pub enum ControlPacketType {
     CONNECT = 1,
     CONNACK = 2,
@@ -324,6 +324,7 @@ impl FixHeader {
         FixHeader { control_packet_type, flags }
     }
 }
+#[allow(dead_code)]
 pub enum PayloadCondition {
     Required,
     Optional,

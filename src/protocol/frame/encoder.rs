@@ -1,4 +1,4 @@
-use crate::{definitions::*, packet::*};
+use crate::protocol::{definitions::*, packet::*};
 use bytes::{BufMut, Bytes, BytesMut};
 use num_traits::ToPrimitive;
 

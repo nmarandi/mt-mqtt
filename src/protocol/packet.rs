@@ -1,4 +1,4 @@
-use crate::definitions::*;
+use crate::protocol::definitions::*;
 use bytes::Bytes;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
@@ -24,9 +24,12 @@ impl Properties {
 }
 #[derive(Debug, Clone, Default)]
 pub struct ConnectFlags {
+    #[allow(dead_code)]
     pub clean_start: bool,
     pub will_flag: bool,
+    #[allow(dead_code)]
     pub will_qos: u8,
+    #[allow(dead_code)]
     pub will_retain: bool,
     pub password_flag: bool,
     pub user_name_flag: bool,
@@ -70,6 +73,7 @@ pub struct ConnAckFlags {
     pub session_present_flag: bool,
 }
 impl ConnAckFlags {
+    #[allow(dead_code)]
     pub fn new(byte: u8) -> ConnAckFlags {
         ConnAckFlags {
             session_present_flag: (byte & 0b0000_0001) != 0,
@@ -120,6 +124,7 @@ impl PublishVariableHeader {
         }
     }
 
+    #[allow(dead_code)]
     pub fn from(topic_name: String, packet_identifier: Option<u16>, _properties: Vec<Option<Property>>) -> Self {
         let mut publish_variable_header = Self::new();
         publish_variable_header.set_properties(_properties);
@@ -132,6 +137,7 @@ impl PublishVariableHeader {
         self.properties.set_properties_vec(_properties);
     }
 
+    #[allow(dead_code)]
     pub fn get_properties(&self) -> Vec<Option<Property>> {
         self.properties.properties.values().cloned().collect()
     }
@@ -252,6 +258,7 @@ impl PubRelVariableHeader {
         }
     }
 
+    #[allow(dead_code)]
     pub fn from(packet_identifier: u16, reason_code: PubRelReasonCode, _properties: Vec<Option<Property>>) -> Self {
         let mut pub_ack_variable_header = Self::new();
         pub_ack_variable_header.set_properties(_properties);
@@ -264,6 +271,7 @@ impl PubRelVariableHeader {
         self.properties.set_properties_vec(_properties);
     }
 
+    #[allow(dead_code)]
     pub fn get_properties(&self) -> Vec<Option<Property>> {
         self.properties.properties.values().cloned().collect()
     }
@@ -334,6 +342,7 @@ impl Default for RetainHandlingOption {
     }
 }
 #[derive(Debug, Default)]
+#[allow(dead_code)]
 pub struct SubscriptionOptions {
     pub maximum_qos: Qos,
     pub no_local_option: bool,
@@ -354,6 +363,7 @@ impl SubscriptionOptions {
 }
 #[derive(Debug, Default)]
 pub struct SubscribePayload {
+    #[allow(dead_code)]
     pub subscription_options: SubscriptionOptions,
     pub topic_filter: String,
 }
@@ -376,6 +386,7 @@ impl SubscribeVariableHeader {
         }
     }
 
+    #[allow(dead_code)]
     pub fn from(packet_identifier: u16, subscribe_payload: Vec<SubscribePayload>, _properties: Vec<Option<Property>>) -> Self {
         let mut pub_ack_variable_header = Self::new();
         pub_ack_variable_header.set_properties(_properties);
@@ -388,6 +399,7 @@ impl SubscribeVariableHeader {
         self.properties.set_properties_vec(_properties);
     }
 
+    #[allow(dead_code)]
     pub fn get_properties(&self) -> Vec<Option<Property>> {
         self.properties.properties.values().cloned().collect()
     }
@@ -446,11 +458,13 @@ impl Default for SubAckVariableHeader {
     }
 }
 #[derive(Debug, Default)]
+#[allow(dead_code)]
 pub struct UnsubscribeControlPacket {
     pub variable_header: UnsubscribeVariableHeader,
 }
 #[derive(Debug, Default)]
 pub struct UnsubscribePayload {
+    #[allow(dead_code)]
     pub topic_filters: Vec<String>,
 }
 #[derive(Debug)]
@@ -458,6 +472,7 @@ pub struct UnsubscribeVariableHeader {
     pub unsubscribe_payload: UnsubscribePayload,
     properties: Properties,
 }
+#[allow(dead_code)]
 impl UnsubscribeVariableHeader {
     pub fn new() -> Self {
         let mut properties_map = HashMap::new();
@@ -490,18 +505,23 @@ impl Default for UnsubscribeVariableHeader {
     }
 }
 #[derive(Debug, Default)]
+#[allow(dead_code)]
 pub struct UnsubAckControlPacket {
     pub variable_header: UnsubAckVariableHeader,
 }
 #[derive(Debug, Default)]
+#[allow(dead_code)]
 pub struct UnsubAckPayload {
+    #[allow(dead_code)]
     pub un_sub_ack_reason_code: Vec<UnSubAckReasonCode>,
 }
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct UnsubAckVariableHeader {
     pub unsub_ack_payload: UnsubAckPayload,
     properties: Properties,
 }
+#[allow(dead_code)]
 impl UnsubAckVariableHeader {
     pub fn new() -> Self {
         let mut properties_map = HashMap::new();
@@ -557,6 +577,7 @@ impl DisconnectVariableHeader {
         }
     }
 
+    #[allow(dead_code)]
     pub fn from(disconnect_reason_code: DisconnectReasonCode, _properties: Vec<Option<Property>>) -> Self {
         let mut pub_ack_variable_header = Self::new();
         pub_ack_variable_header.set_properties(_properties);
@@ -568,6 +589,7 @@ impl DisconnectVariableHeader {
         self.properties.set_properties_vec(_properties);
     }
 
+    #[allow(dead_code)]
     pub fn get_properties(&self) -> Vec<Option<Property>> {
         self.properties.properties.values().cloned().collect()
     }
@@ -578,6 +600,7 @@ impl Default for DisconnectVariableHeader {
     }
 }
 #[derive(Debug, Default)]
+#[allow(dead_code)]
 pub struct AuthControlPacket {
     pub variable_header: AuthVariableHeader,
 }
@@ -600,6 +623,7 @@ impl AuthVariableHeader {
         }
     }
 
+    #[allow(dead_code)]
     pub fn from(auth_reason_code: AuthReasonCode, _properties: Vec<Option<Property>>) -> Self {
         let mut pub_ack_variable_header = Self::new();
         pub_ack_variable_header.set_properties(_properties);
@@ -607,10 +631,12 @@ impl AuthVariableHeader {
         pub_ack_variable_header
     }
 
+    #[allow(dead_code)]
     pub fn set_properties(&mut self, _properties: Vec<Option<Property>>) {
         self.properties.set_properties_vec(_properties);
     }
 
+    #[allow(dead_code)]
     pub fn get_properties(&self) -> Vec<Option<Property>> {
         self.properties.properties.values().cloned().collect()
     }
