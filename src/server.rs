@@ -1,19 +1,15 @@
 use crate::{broker::Broker, client::*};
 use tokio::net::{TcpListener, TcpStream};
-
-#[allow(dead_code)]
-const SECURE_TCP_PORT: u32 = 8883;
-const UNSECURE_TCP_PORT: u32 = 1883;
+use std::time::Instant;
 
 pub struct MqttServer {}
 
 impl MqttServer {
-    async fn client_spawner(stream: TcpStream, broker_sender: tokio::sync::mpsc::Sender<crate::broker::BrokerMessage>) -> Client {
-        println!("Spawning a client");
+    fn client_spawner(stream: TcpStream, broker_sender: tokio::sync::mpsc::Sender<crate::broker::BrokerMessage>) -> Client {
         Client::new(stream, broker_sender)
     }
 
-    pub async fn start() -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn start(bind_addr: &str) -> Result<(), Box<dyn std::error::Error>> {
         // Create and start the broker
         let broker = Broker::new();
         let broker_sender = broker.get_sender();
@@ -23,18 +19,23 @@ impl MqttServer {
             broker.run().await;
         });
         
-        let bind_addr = String::from("0.0.0.0:") + &UNSECURE_TCP_PORT.to_string();
-        let unsecure_listener = TcpListener::bind(bind_addr.clone()).await?;
-        println!("Listening on {}", bind_addr);
+        let unsecure_listener = TcpListener::bind(bind_addr).await?;
+        tracing::info!("Listening on {}", bind_addr);
         
         loop {
+            let accept_start = Instant::now();
             // Asynchronously wait for an inbound socket.
             let (socket, addr) = unsecure_listener.accept().await?;
-            println!("Got a new socket from addr: {:?}", addr);
+            let accept_time = accept_start.elapsed();
+            tracing::warn!("TIMING: accept took {:?} for {:?}", accept_time, addr);
+            
+            let setup_start = Instant::now();
             
             let broker_sender_clone = broker_sender.clone();
-            let client = MqttServer::client_spawner(socket, broker_sender_clone).await;
+            let client = MqttServer::client_spawner(socket, broker_sender_clone);
             tokio::spawn(client.run());
+            let setup_time = setup_start.elapsed();
+            tracing::warn!("TIMING: client setup+spawn took {:?}", setup_time);
         }
     }
 }

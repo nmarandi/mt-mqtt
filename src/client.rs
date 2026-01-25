@@ -99,8 +99,9 @@ impl Client {
     }
 
     pub async fn write_value(&mut self, src: &mut BytesMut) -> std::io::Result<()> {
-        println!("write_value: {:?}", src);
+        tracing::trace!("write_value: {:?}", src);
         self.write.write_buf(src).await?;
+        self.write.flush().await?;
         Ok(())
     }
 
@@ -110,7 +111,9 @@ impl Client {
     }
 
     pub async fn run(mut self) {
+        let run_start = std::time::Instant::now();
         let (msg_sender, mut msg_receiver) = mpsc::channel(100);
+        let mut graceful_disconnect = false;
         
         loop {
             tokio::select! {
@@ -118,15 +121,28 @@ impl Client {
                 frame_result = self.read_frame() => {
                     match frame_result {
                         Ok(msg) => {
-                            if !self.handle_frame(msg, &msg_sender).await {
+                            let frame_time = run_start.elapsed();
+                            tracing::warn!("TIMING: received frame {:?} at +{:?}", 
+                                msg.fix_header.control_packet_type, frame_time);
+                            let (should_continue, is_graceful) = self.handle_frame(msg, &msg_sender).await;
+                            if !should_continue {
+                                graceful_disconnect = is_graceful;
                                 break;
                             }
                         }
                         Err(Error::Incomplete(_)) => {
-                            println!("Not enough data has been buffered");
+                            tracing::trace!("Not enough data has been buffered");
                         }
                         Err(Error::Other(err)) => {
-                            println!("Error: {}", err);
+                            // Don't log error if it's just a normal connection close or forceful termination
+                            let err_lower = err.to_lowercase();
+                            if !err_lower.contains("connection ended by peer") 
+                                && !err_lower.contains("connection reset by peer")
+                                && !err_lower.contains("forcibly closed") {
+                                tracing::error!("Error: {}", err);
+                            } else {
+                                tracing::debug!("Connection closed: {}", err);
+                            }
                             break;
                         }
                     }
@@ -134,23 +150,30 @@ impl Client {
                 // Handle outgoing publish messages from broker
                 Some(publish_msg) = msg_receiver.recv() => {
                     if let Err(e) = self.send_publish_to_client(publish_msg).await {
-                        println!("Failed to send publish to client: {}", e);
+                        tracing::debug!("Failed to send publish to client (connection may be closed): {}", e);
                         break;
                     }
                 }
             }
         }
         
+        let total_time = run_start.elapsed();
+        tracing::warn!("TIMING: client session total: {:?}", total_time);
+        
         // Notify broker of disconnect
         let _ = self.broker_sender.send(BrokerMessage::Disconnect {
             client_id: self.id.clone(),
         }).await;
         
-        println!("Client {} disconnected", self.id);
+        if graceful_disconnect {
+            tracing::info!("Client {} disconnected gracefully", self.id);
+        } else {
+            tracing::debug!("Client {} connection closed", self.id);
+        }
     }
     
-    async fn handle_frame(&mut self, msg: Frame, msg_sender: &Sender<PublishMessage>) -> bool {
-        println!("connection_packet: {:?}", msg.control_packet);
+    async fn handle_frame(&mut self, msg: Frame, msg_sender: &Sender<PublishMessage>) -> (bool, bool) {
+        tracing::debug!("connection_packet: {:?}", msg.control_packet);
         
         match msg.control_packet {
             ControlPacket::Connect(control_packet) => {
@@ -166,7 +189,7 @@ impl Client {
                     self.id = format!("auto-{}", timestamp);
                 }
                 
-                println!("Client connected with ID: {}", self.id);
+                tracing::info!("Client connected with ID: {}", self.id);
                 
                 // Register with broker
                 let _ = self.broker_sender.send(BrokerMessage::Connect {
@@ -178,7 +201,7 @@ impl Client {
                 self.write_value(&mut Frame::serialize(Frame::new(ControlPacketType::CONNACK)).unwrap())
                     .await
                     .unwrap();
-                true
+                (true, false)
             }
             
             ControlPacket::Publish(control_packet) => {
@@ -187,7 +210,7 @@ impl Client {
                 let payload = control_packet.payload.data.to_vec();
                 let retain = msg.fix_header.flags.0 == 1;
                 
-                println!("Received PUBLISH: topic='{}', qos={}, retain={}, payload_len={}", 
+                tracing::debug!("Received PUBLISH: topic='{}', qos={}, retain={}, payload_len={}", 
                         topic, qos, retain, payload.len());
                 
                 // Send to broker for distribution
@@ -236,27 +259,27 @@ impl Client {
                     }
                     _ => {} // QoS 0 - no acknowledgment needed
                 }
-                true
+                (true, false)
             }
             
             ControlPacket::PubAck(control_packet) => {
                 // Received PUBACK for our outgoing QoS 1 message
                 let packet_id = control_packet.variable_header.packet_identifier;
-                println!("Received PUBACK for packet_id={}", packet_id);
+                tracing::debug!("Received PUBACK for packet_id={}", packet_id);
                 
                 if self.message_state_tracker.handle_puback(packet_id) {
                     self.packet_id_manager.release(packet_id);
-                    println!("QoS 1 message {} acknowledged", packet_id);
+                    tracing::debug!("QoS 1 message {} acknowledged", packet_id);
                 } else {
-                    println!("Warning: Received PUBACK for unknown packet_id={}", packet_id);
+                    tracing::warn!("Received PUBACK for unknown packet_id={}", packet_id);
                 }
-                true
+                (true, false)
             }
             
             ControlPacket::PubRec(control_packet) => {
                 // Received PUBREC for our outgoing QoS 2 message - send PUBREL
                 let packet_id = control_packet.variable_header.packet_identifier;
-                println!("Received PUBREC for packet_id={}", packet_id);
+                tracing::debug!("Received PUBREC for packet_id={}", packet_id);
                 
                 if self.message_state_tracker.handle_pubrec(packet_id) {
                     // Send PUBREL
@@ -271,17 +294,17 @@ impl Client {
                         }),
                     };
                     self.write_value(&mut Frame::serialize(pub_rel).unwrap()).await.unwrap();
-                    println!("Sent PUBREL for packet_id={}", packet_id);
+                    tracing::debug!("Sent PUBREL for packet_id={}", packet_id);
                 } else {
-                    println!("Warning: Received PUBREC for unknown packet_id={}", packet_id);
+                    tracing::warn!("Received PUBREC for unknown packet_id={}", packet_id);
                 }
-                true
+                (true, false)
             }
             
             ControlPacket::PubRel(control_packet) => {
                 // Received PUBREL for incoming QoS 2 message - send PUBCOMP
                 let packet_id = control_packet.variable_header.packet_identifier;
-                println!("Received PUBREL for packet_id={}", packet_id);
+                tracing::debug!("Received PUBREL for packet_id={}", packet_id);
                 
                 self.message_state_tracker.handle_pubrel(packet_id);
                 
@@ -296,22 +319,22 @@ impl Client {
                     }),
                 };
                 self.write_value(&mut Frame::serialize(pub_comp).unwrap()).await.unwrap();
-                println!("Sent PUBCOMP for packet_id={}", packet_id);
-                true
+                tracing::debug!("Sent PUBCOMP for packet_id={}", packet_id);
+                (true, false)
             }
             
             ControlPacket::PubComp(control_packet) => {
                 // Received PUBCOMP - QoS 2 flow complete
                 let packet_id = control_packet.variable_header.packet_identifier;
-                println!("Received PUBCOMP for packet_id={}", packet_id);
+                tracing::debug!("Received PUBCOMP for packet_id={}", packet_id);
                 
                 if self.message_state_tracker.handle_pubcomp(packet_id) {
                     self.packet_id_manager.release(packet_id);
-                    println!("QoS 2 message {} completed", packet_id);
+                    tracing::debug!("QoS 2 message {} completed", packet_id);
                 } else {
-                    println!("Warning: Received PUBCOMP for unknown packet_id={}", packet_id);
+                    tracing::warn!("Received PUBCOMP for unknown packet_id={}", packet_id);
                 }
-                true
+                (true, false)
             }
             
             ControlPacket::Subscribe(control_packet) => {
@@ -320,7 +343,7 @@ impl Client {
                     .map(|sub| sub.topic_filter.clone())
                     .collect();
                     
-                println!("Client {} subscribing to topics: {:?}", self.id, topics);
+                tracing::debug!("Client {} subscribing to topics: {:?}", self.id, topics);
                 
                 // Notify broker
                 let _ = self.broker_sender.send(BrokerMessage::Subscribe {
@@ -351,30 +374,30 @@ impl Client {
                     }),
                 };
                 self.write_value(&mut Frame::serialize(sub_ack).unwrap()).await.unwrap();
-                true
+                (true, false)
             }
             
             ControlPacket::PingReq => {
                 self.write_value(&mut Frame::serialize(Frame::new(ControlPacketType::PINGRESP)).unwrap())
                     .await
                     .unwrap();
-                true
+                (true, false)
             }
             
             ControlPacket::Disconnect(_) => {
-                println!("Client {} requested disconnect", self.id);
-                false
+                tracing::info!("Client {} requested disconnect", self.id);
+                (false, true)
             }
             
             _ => {
-                println!("Unhandled packet type");
-                true
+                tracing::debug!("Unhandled packet type");
+                (true, false)
             }
         }
     }
     
     async fn send_publish_to_client(&mut self, msg: PublishMessage) -> Result<(), Box<dyn std::error::Error>> {
-        println!("Sending PUBLISH to client {}: topic={}, qos={}", self.id, msg.topic, msg.qos);
+        tracing::debug!("Sending PUBLISH to client {}: topic={}, qos={}", self.id, msg.topic, msg.qos);
         
         let mut publish_packet = PublishControlPacket {
             variable_header: PublishVariableHeader::new(),
@@ -413,7 +436,7 @@ impl Client {
                     Some(id)
                 }
                 None => {
-                    println!("Warning: No packet IDs available, cannot send QoS {} message", msg.qos);
+                    tracing::warn!("No packet IDs available, cannot send QoS {} message", msg.qos);
                     return Ok(());
                 }
             }
@@ -436,7 +459,7 @@ impl Client {
         self.write_value(&mut Frame::serialize(frame)?).await?;
         
         if let Some(id) = packet_id {
-            println!("Sent QoS {} PUBLISH with packet_id={}", msg.qos, id);
+            tracing::debug!("Sent QoS {} PUBLISH with packet_id={}", msg.qos, id);
         }
         
         Ok(())

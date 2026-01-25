@@ -52,6 +52,7 @@ pub fn encode_sub_ack_payload(src: SubAckPayload, bytes: &mut BytesMut) {
         bytes.put_u8(iter.to_u8().unwrap());
     }
 }
+#[allow(dead_code)]
 pub fn encode_properties(src: Vec<Option<Property>>, bytes: &mut BytesMut) {
     let mut data: BytesMut = BytesMut::new();
     for elem in src.iter() {
@@ -63,6 +64,7 @@ pub fn encode_properties(src: Vec<Option<Property>>, bytes: &mut BytesMut) {
     bytes.extend(VariableByteInteger::encode_u32(data.len() as u32));
     bytes.extend(data);
 }
+#[allow(dead_code)]
 pub fn encode_property(src: &Property, bytes: &mut BytesMut) {
     match src {
         Property::PayloadFormatIndicator(p_data) => {
@@ -179,6 +181,7 @@ pub fn encode_string(src: &str, bytes: &mut BytesMut) {
     bytes.put_u16(src.len() as u16);
     bytes.put_slice(src.as_bytes());
 }
+#[allow(dead_code)]
 pub fn encode_binary_data(src: &Bytes, bytes: &mut BytesMut) {
     bytes.put_u16(src.len() as u16);
     bytes.put_slice(src.as_ref());

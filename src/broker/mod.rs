@@ -65,22 +65,22 @@ impl Broker {
     }
 
     pub async fn run(mut self) {
-        println!("Broker started and ready to route messages");
+        tracing::info!("Broker started and ready to route messages");
         
         while let Some(message) = self.receiver.recv().await {
             match message {
                 BrokerMessage::Connect { client_id, sender } => {
-                    println!("Broker: Client {} connected", client_id);
+                    tracing::info!("Broker: Client {} connected", client_id);
                     self.clients.insert(client_id, sender);
                 }
                 
                 BrokerMessage::Disconnect { client_id } => {
-                    println!("Broker: Client {} disconnected", client_id);
+                    tracing::info!("Broker: Client {} disconnected", client_id);
                     self.clients.remove(&client_id);
                 }
                 
                 BrokerMessage::Subscribe { client_id, topics } => {
-                    println!("Broker: Client {} subscribing to {:?}", client_id, topics);
+                    tracing::debug!("Broker: Client {} subscribing to {:?}", client_id, topics);
                     for topic in topics {
                         self.topic_tree.subscribe(&topic, &client_id);
                         
@@ -94,14 +94,14 @@ impl Broker {
                 }
                 
                 BrokerMessage::Unsubscribe { client_id, topics } => {
-                    println!("Broker: Client {} unsubscribing from {:?}", client_id, topics);
+                    tracing::debug!("Broker: Client {} unsubscribing from {:?}", client_id, topics);
                     for topic in topics {
                         self.topic_tree.unsubscribe(&topic, &client_id);
                     }
                 }
                 
                 BrokerMessage::Publish(msg) => {
-                    println!("Broker: Publishing to topic '{}', payload size: {} bytes", 
+                    tracing::debug!("Broker: Publishing to topic '{}', payload size: {} bytes", 
                             msg.topic, msg.payload.len());
                     
                     // Store retained message
@@ -115,15 +115,22 @@ impl Broker {
                     
                     // Find all subscribers matching this topic
                     let subscribers = self.find_subscribers(&msg.topic);
-                    println!("Broker: Found {} subscribers for topic '{}'", subscribers.len(), msg.topic);
+                    tracing::debug!("Broker: Found {} subscribers for topic '{}'", subscribers.len(), msg.topic);
                     
-                    // Send message to all matching subscribers
+                    // Send message to all matching subscribers in parallel
                     for subscriber_id in subscribers {
                         if let Some(client_sender) = self.clients.get(&subscriber_id) {
-                            match client_sender.send(msg.clone()).await {
-                                Ok(_) => println!("Broker: Sent message to client {}", subscriber_id),
-                                Err(e) => println!("Broker: Failed to send to {}: {}", subscriber_id, e),
-                            }
+                            let sender_clone = client_sender.clone();
+                            let msg_clone = msg.clone();
+                            let sub_id = subscriber_id.clone();
+                            
+                            // Spawn task to send message in parallel
+                            tokio::spawn(async move {
+                                match sender_clone.send(msg_clone).await {
+                                    Ok(_) => tracing::trace!("Broker: Sent message to client {}", sub_id),
+                                    Err(e) => tracing::debug!("Broker: Failed to send to {} (likely disconnected): {}", sub_id, e),
+                                }
+                            });
                         }
                     }
                 }

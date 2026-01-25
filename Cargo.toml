@@ -13,6 +13,8 @@ num-traits = "0.2.17"
 num-derive = "0.4.1"
 strum = "0.25.0"
 strum_macros = "0.25.3"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
 tokio-test = "0.4"
