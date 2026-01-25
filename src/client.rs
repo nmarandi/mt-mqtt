@@ -50,7 +50,13 @@ impl Client {
 
     pub async fn read_frame(&mut self) -> Result<Frame, Error> {
         loop {
-            // There is not enough buffered data to read a frame.
+            // First, try to parse a frame from already buffered data
+            // This is important when multiple frames arrive in one TCP read
+            if let Some(frame) = self.deserialize_frame()? {
+                return Ok(frame);
+            }
+            
+            // Not enough data buffered to parse a frame.
             // Attempt to read more data from the socket.
             //
             // On success, the number of bytes is returned. `0`
@@ -65,12 +71,6 @@ impl Client {
                 } else {
                     return Err(Error::Other("connection reset by peer".into()));
                 }
-            }
-            // Attempt to parse a frame from the buffered data. If
-            // enough data has been buffered, the frame is
-            // returned.
-            if let Some(frame) = self.deserialize_frame()? {
-                return Ok(frame);
             }
         }
     }

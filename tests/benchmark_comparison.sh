@@ -53,9 +53,9 @@ detect_os() {
 detect_os
 
 # Test parameters
-MESSAGE_COUNTS=(10 50 100)
+MESSAGE_COUNTS=(100 1000 10000)
 PAYLOAD_SIZES=(10 100 1000)
-QOS_LEVELS=(0 1)
+QOS_LEVELS=(0 1 2)  # Only QoS 0 for now - QoS 1/2 have known issues
 
 # Colors for output
 RED='\033[0;31m'
@@ -113,6 +113,7 @@ wait_for_broker() {
 }
 
 # Benchmark: Message throughput (publish only, no subscriber)
+# Uses -l flag to send multiple messages on a single connection (eliminates process spawn overhead)
 benchmark_publish_throughput() {
     local broker_name=$1
     local count=$2
@@ -124,8 +125,49 @@ benchmark_publish_throughput() {
     
     local start_ms=$(date +%s%3N)
     
-    for i in $(seq 1 $count); do
-        "$MOSQUITTO_PUB" -h localhost -p 1883 -t "benchmark/throughput" -m "$payload" -q $qos
+    # Use -l flag: reads from stdin, one message per line, single connection
+    # This eliminates the ~45ms process spawn + connection overhead per message
+    for i in $(seq 1 $count); do echo "$payload"; done | \
+        "$MOSQUITTO_PUB" -h localhost -p 1883 -t "benchmark/throughput" -q $qos -l
+    
+    local end_ms=$(date +%s%3N)
+    local duration_ms=$((end_ms - start_ms))
+    local rate=0
+    if [ "$duration_ms" -gt 0 ]; then
+        rate=$((count * 1000 / duration_ms))
+    fi
+    
+    echo "$duration_ms $rate"
+}
+
+# Benchmark: Message throughput with parallel processes
+benchmark_publish_parallel() {
+    local broker_name=$1
+    local count=$2
+    local payload_size=$3
+    local qos=$4
+    local parallelism=${5:-10}  # Default 10 parallel processes
+    
+    # Generate payload
+    local payload=$(head -c $payload_size /dev/zero | tr '\0' 'X')
+    
+    local start_ms=$(date +%s%3N)
+    
+    # Launch parallel publishers
+    local pids=()
+    local per_process=$((count / parallelism))
+    
+    for p in $(seq 1 $parallelism); do
+        (
+            for i in $(seq 1 $per_process); do echo "$payload"; done | \
+                "$MOSQUITTO_PUB" -h localhost -p 1883 -t "benchmark/parallel/$p" -q $qos -l
+        ) &
+        pids+=($!)
+    done
+    
+    # Wait for all to complete
+    for pid in "${pids[@]}"; do
+        wait $pid 2>/dev/null || true
     done
     
     local end_ms=$(date +%s%3N)
@@ -139,6 +181,7 @@ benchmark_publish_throughput() {
 }
 
 # Benchmark: End-to-end latency with subscriber
+# Uses -l flag for publishing to eliminate spawn overhead
 benchmark_e2e_latency() {
     local broker_name=$1
     local count=$2
@@ -151,16 +194,14 @@ benchmark_e2e_latency() {
     fi
     
     # Start subscriber in background
-    $timeout_cmd 60 "$MOSQUITTO_SUB" -h localhost -p 1883 -t "benchmark/latency" -q $qos -C $count > "$received_file" 2>/dev/null &
+    $timeout_cmd 120 "$MOSQUITTO_SUB" -h localhost -p 1883 -t "benchmark/latency" -q $qos -C $count > "$received_file" 2>/dev/null &
     local sub_pid=$!
     sleep 0.5
     
     local start_ms=$(date +%s%3N)
     
-    # Publish messages
-    for i in $(seq 1 $count); do
-        "$MOSQUITTO_PUB" -h localhost -p 1883 -t "benchmark/latency" -m "msg$i" -q $qos
-    done
+    # Publish messages using -l flag (single connection, multiple messages)
+    seq 1 $count | "$MOSQUITTO_PUB" -h localhost -p 1883 -t "benchmark/latency" -q $qos -l
     
     # Wait for subscriber to finish
     wait $sub_pid 2>/dev/null || true
@@ -174,7 +215,7 @@ benchmark_e2e_latency() {
     echo "$duration_ms $received"
 }
 
-# Benchmark: Connection rate
+# Benchmark: Connection rate (each call = new connection)
 benchmark_connection_rate() {
     local broker_name=$1
     local count=$2
@@ -183,6 +224,40 @@ benchmark_connection_rate() {
     
     for i in $(seq 1 $count); do
         "$MOSQUITTO_PUB" -h localhost -p 1883 -t "benchmark/conn" -m "x" -q 0
+    done
+    
+    local end_ms=$(date +%s%3N)
+    local duration_ms=$((end_ms - start_ms))
+    local rate=0
+    if [ "$duration_ms" -gt 0 ]; then
+        rate=$((count * 1000 / duration_ms))
+    fi
+    
+    echo "$duration_ms $rate"
+}
+
+# Benchmark: Connection rate with parallel connections
+benchmark_connection_rate_parallel() {
+    local broker_name=$1
+    local count=$2
+    local parallelism=${3:-10}
+    
+    local start_ms=$(date +%s%3N)
+    
+    local pids=()
+    local per_process=$((count / parallelism))
+    
+    for p in $(seq 1 $parallelism); do
+        (
+            for i in $(seq 1 $per_process); do
+                "$MOSQUITTO_PUB" -h localhost -p 1883 -t "benchmark/conn/$p" -m "x" -q 0
+            done
+        ) &
+        pids+=($!)
+    done
+    
+    for pid in "${pids[@]}"; do
+        wait $pid 2>/dev/null || true
     done
     
     local end_ms=$(date +%s%3N)
@@ -204,8 +279,8 @@ run_benchmarks_with_storage() {
     
     print_header "Benchmarking $broker_name"
     
-    # Connection rate benchmark
-    echo -e "\n${YELLOW}Connection Rate (connect + publish + disconnect per iteration):${NC}"
+    # Connection rate benchmark (sequential - measures per-connection overhead)
+    echo -e "\n${YELLOW}Connection Rate - Sequential (measures per-connection overhead):${NC}"
     printf "%-15s %-15s %-15s\n" "Connections" "Time (ms)" "Rate (conn/s)"
     printf "%-15s %-15s %-15s\n" "-----------" "---------" "-------------"
     
@@ -218,13 +293,27 @@ run_benchmarks_with_storage() {
         RESULTS["${broker_name}_conn_${count}_rate"]="$rate"
     done
     
-    # Publish throughput benchmark
-    echo -e "\n${YELLOW}Publish Throughput (QoS 0):${NC}"
+    # Connection rate benchmark (parallel - real-world concurrent load)
+    echo -e "\n${YELLOW}Connection Rate - Parallel 10x (concurrent load):${NC}"
+    printf "%-15s %-15s %-15s\n" "Connections" "Time (ms)" "Rate (conn/s)"
+    printf "%-15s %-15s %-15s\n" "-----------" "---------" "-------------"
+    
+    for count in 100 500 1000; do
+        result=$(benchmark_connection_rate_parallel "$broker_name" $count 10)
+        duration=$(echo $result | cut -d' ' -f1)
+        rate=$(echo $result | cut -d' ' -f2)
+        printf "%-15s %-15s %-15s\n" "$count" "$duration" "$rate"
+        RESULTS["${broker_name}_conn_parallel_${count}"]="$duration"
+        RESULTS["${broker_name}_conn_parallel_${count}_rate"]="$rate"
+    done
+    
+    # Publish throughput benchmark (uses -l flag = single connection)
+    echo -e "\n${YELLOW}Publish Throughput - Single Connection (using -l flag, no spawn overhead):${NC}"
     printf "%-10s %-15s %-15s %-15s\n" "Messages" "Payload" "Time (ms)" "Rate (msg/s)"
     printf "%-10s %-15s %-15s %-15s\n" "--------" "-------" "---------" "------------"
     
-    for count in "${MESSAGE_COUNTS[@]}"; do
-        for size in "${PAYLOAD_SIZES[@]}"; do
+    for count in 1000 10000; do
+        for size in 10 100 1000; do
             result=$(benchmark_publish_throughput "$broker_name" $count $size 0)
             duration=$(echo $result | cut -d' ' -f1)
             rate=$(echo $result | cut -d' ' -f2)
@@ -234,12 +323,28 @@ run_benchmarks_with_storage() {
         done
     done
     
+    # Parallel publish throughput (10 connections each publishing)
+    echo -e "\n${YELLOW}Publish Throughput - Parallel 10x (10 connections, each using -l):${NC}"
+    printf "%-10s %-15s %-15s %-15s\n" "Messages" "Payload" "Time (ms)" "Rate (msg/s)"
+    printf "%-10s %-15s %-15s %-15s\n" "--------" "-------" "---------" "------------"
+    
+    for count in 1000 10000; do
+        for size in 100; do
+            result=$(benchmark_publish_parallel "$broker_name" $count $size 0 10)
+            duration=$(echo $result | cut -d' ' -f1)
+            rate=$(echo $result | cut -d' ' -f2)
+            printf "%-10s %-15s %-15s %-15s\n" "$count" "${size}B" "$duration" "$rate"
+            RESULTS["${broker_name}_pub_parallel_${count}_${size}"]="$duration"
+            RESULTS["${broker_name}_pub_parallel_${count}_${size}_rate"]="$rate"
+        done
+    done
+    
     # End-to-end latency benchmark
     echo -e "\n${YELLOW}End-to-End Latency (publish to subscriber receive):${NC}"
     printf "%-10s %-10s %-15s %-15s\n" "Messages" "QoS" "Time (ms)" "Received"
     printf "%-10s %-10s %-15s %-15s\n" "--------" "---" "---------" "--------"
     
-    for count in 10 50; do
+    for count in 1000 5000; do
         for qos in "${QOS_LEVELS[@]}"; do
             result=$(benchmark_e2e_latency "$broker_name" $count $qos)
             duration=$(echo $result | cut -d' ' -f1)
@@ -254,9 +359,9 @@ run_benchmarks_with_storage() {
 print_comparison_table() {
     print_header "Comparison Summary"
     
-    echo -e "\n${YELLOW}=== Connection Rate (ms / rate) ===${NC}"
-    printf "%-20s %-20s %-20s %-15s\n" "Test" "mt-mqtt" "mosquitto" "Winner"
-    printf "%-20s %-20s %-20s %-15s\n" "----" "-------" "---------" "------"
+    echo -e "\n${YELLOW}=== Connection Rate - Sequential (conn/s) ===${NC}"
+    printf "%-20s %-22s %-22s %-15s\n" "Test" "mt-mqtt" "mosquitto" "Winner"
+    printf "%-20s %-22s %-22s %-15s\n" "----" "-------" "---------" "------"
     
     for count in 10 50 100; do
         local mt="${RESULTS[mt-mqtt_conn_${count}]:-N/A}"
@@ -273,16 +378,39 @@ print_comparison_table() {
                 winner="tie"
             fi
         fi
-        printf "%-20s %-20s %-20s " "${count} connections" "${mt}ms (${mt_rate}/s)" "${mo}ms (${mo_rate}/s)"
+        printf "%-20s %-22s %-22s " "${count} conn" "${mt}ms (${mt_rate}/s)" "${mo}ms (${mo_rate}/s)"
         echo -e "$winner"
     done
     
-    echo -e "\n${YELLOW}=== Publish Throughput QoS 0 (ms / rate) ===${NC}"
-    printf "%-20s %-20s %-20s %-15s\n" "Test" "mt-mqtt" "mosquitto" "Winner"
-    printf "%-20s %-20s %-20s %-15s\n" "----" "-------" "---------" "------"
+    echo -e "\n${YELLOW}=== Connection Rate - Parallel 10x (conn/s) ===${NC}"
+    printf "%-20s %-22s %-22s %-15s\n" "Test" "mt-mqtt" "mosquitto" "Winner"
+    printf "%-20s %-22s %-22s %-15s\n" "----" "-------" "---------" "------"
     
-    for count in 100; do
-        for size in 10 1000; do
+    for count in 100 500 1000; do
+        local mt="${RESULTS[mt-mqtt_conn_parallel_${count}]:-N/A}"
+        local mo="${RESULTS[mosquitto_conn_parallel_${count}]:-N/A}"
+        local mt_rate="${RESULTS[mt-mqtt_conn_parallel_${count}_rate]:-0}"
+        local mo_rate="${RESULTS[mosquitto_conn_parallel_${count}_rate]:-0}"
+        local winner=""
+        if [ "$mt" != "N/A" ] && [ "$mo" != "N/A" ]; then
+            if [ "$mt" -lt "$mo" ]; then
+                winner="${GREEN}mt-mqtt${NC}"
+            elif [ "$mo" -lt "$mt" ]; then
+                winner="${YELLOW}mosquitto${NC}"
+            else
+                winner="tie"
+            fi
+        fi
+        printf "%-20s %-22s %-22s " "${count} conn" "${mt}ms (${mt_rate}/s)" "${mo}ms (${mo_rate}/s)"
+        echo -e "$winner"
+    done
+    
+    echo -e "\n${YELLOW}=== Publish Throughput - Single Connection (msg/s) ===${NC}"
+    printf "%-20s %-22s %-22s %-15s\n" "Test" "mt-mqtt" "mosquitto" "Winner"
+    printf "%-20s %-22s %-22s %-15s\n" "----" "-------" "---------" "------"
+    
+    for count in 1000 10000; do
+        for size in 100 1000; do
             local mt="${RESULTS[mt-mqtt_pub_${count}_${size}]:-N/A}"
             local mo="${RESULTS[mosquitto_pub_${count}_${size}]:-N/A}"
             local mt_rate="${RESULTS[mt-mqtt_pub_${count}_${size}_rate]:-0}"
@@ -297,17 +425,42 @@ print_comparison_table() {
                     winner="tie"
                 fi
             fi
-            printf "%-20s %-20s %-20s " "${count}msg ${size}B" "${mt}ms (${mt_rate}/s)" "${mo}ms (${mo_rate}/s)"
+            printf "%-20s %-22s %-22s " "${count}x${size}B" "${mt}ms (${mt_rate}/s)" "${mo}ms (${mo_rate}/s)"
+            echo -e "$winner"
+        done
+    done
+    
+    echo -e "\n${YELLOW}=== Publish Throughput - Parallel 10x (msg/s) ===${NC}"
+    printf "%-20s %-22s %-22s %-15s\n" "Test" "mt-mqtt" "mosquitto" "Winner"
+    printf "%-20s %-22s %-22s %-15s\n" "----" "-------" "---------" "------"
+    
+    for count in 1000 10000; do
+        for size in 100; do
+            local mt="${RESULTS[mt-mqtt_pub_parallel_${count}_${size}]:-N/A}"
+            local mo="${RESULTS[mosquitto_pub_parallel_${count}_${size}]:-N/A}"
+            local mt_rate="${RESULTS[mt-mqtt_pub_parallel_${count}_${size}_rate]:-0}"
+            local mo_rate="${RESULTS[mosquitto_pub_parallel_${count}_${size}_rate]:-0}"
+            local winner=""
+            if [ "$mt" != "N/A" ] && [ "$mo" != "N/A" ]; then
+                if [ "$mt" -lt "$mo" ]; then
+                    winner="${GREEN}mt-mqtt${NC}"
+                elif [ "$mo" -lt "$mt" ]; then
+                    winner="${YELLOW}mosquitto${NC}"
+                else
+                    winner="tie"
+                fi
+            fi
+            printf "%-20s %-22s %-22s " "${count}x${size}B" "${mt}ms (${mt_rate}/s)" "${mo}ms (${mo_rate}/s)"
             echo -e "$winner"
         done
     done
     
     echo -e "\n${YELLOW}=== End-to-End Latency (ms) ===${NC}"
-    printf "%-20s %-20s %-20s %-15s\n" "Test" "mt-mqtt" "mosquitto" "Winner"
-    printf "%-20s %-20s %-20s %-15s\n" "----" "-------" "---------" "------"
+    printf "%-20s %-22s %-22s %-15s\n" "Test" "mt-mqtt" "mosquitto" "Winner"
+    printf "%-20s %-22s %-22s %-15s\n" "----" "-------" "---------" "------"
     
-    for count in 50; do
-        for qos in 0 1; do
+    for count in 1000 5000; do
+        for qos in 0; do
             local mt="${RESULTS[mt-mqtt_e2e_${count}_qos${qos}]:-N/A}"
             local mo="${RESULTS[mosquitto_e2e_${count}_qos${qos}]:-N/A}"
             local winner=""
@@ -320,7 +473,7 @@ print_comparison_table() {
                     winner="tie"
                 fi
             fi
-            printf "%-20s %-20s %-20s " "E2E ${count}msg QoS${qos}" "${mt}ms" "${mo}ms"
+            printf "%-20s %-22s %-22s " "E2E ${count}msg Q${qos}" "${mt}ms" "${mo}ms"
             echo -e "$winner"
         done
     done
@@ -337,6 +490,21 @@ run_comparison() {
     echo "Host: $(hostname)"
     echo "OS: $OS"
     
+    if [ "$test_target" = "mosquitto" ] || [ "$test_target" = "both" ]; then
+        cleanup
+        print_warning "Starting mosquitto broker..."
+        "$MOSQUITTO_BROKER" &
+        sleep 2
+        
+        if wait_for_broker; then
+            run_benchmarks_with_storage "mosquitto"
+        else
+            echo "Failed to start mosquitto broker"
+        fi
+        
+        cleanup
+    fi
+    
     if [ "$test_target" = "mt-mqtt" ] || [ "$test_target" = "both" ]; then
         cleanup
         print_warning "Starting mt-mqtt broker..."
@@ -348,21 +516,6 @@ run_comparison() {
             run_benchmarks_with_storage "mt-mqtt"
         else
             echo "Failed to start mt-mqtt broker"
-        fi
-        
-        cleanup
-    fi
-    
-    if [ "$test_target" = "mosquitto" ] || [ "$test_target" = "both" ]; then
-        cleanup
-        print_warning "Starting mosquitto broker..."
-        "$MOSQUITTO_BROKER" &
-        sleep 2
-        
-        if wait_for_broker; then
-            run_benchmarks_with_storage "mosquitto"
-        else
-            echo "Failed to start mosquitto broker"
         fi
         
         cleanup

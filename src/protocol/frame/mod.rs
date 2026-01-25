@@ -3,7 +3,7 @@ mod encoder;
 
 use crate::protocol::definitions::*;
 pub use crate::protocol::packet::*;
-use bytes::BytesMut;
+use bytes::{Buf, BytesMut};
 use decoder::*;
 use encoder::*;
 use std::{fmt, io::Cursor};
@@ -109,33 +109,70 @@ impl Frame {
     }
 
     pub fn deserialize(src: &mut Cursor<&[u8]>) -> Result<Frame, Error> {
-        let fix_header = decode_fix_header(src).unwrap();
+        // Check minimum bytes for fixed header (1 byte) + remaining length (at least 1 byte)
+        let buffer_len = src.get_ref().len();
+        if buffer_len < 2 {
+            return Err(Error::Incomplete(2 - buffer_len));
+        }
+        
+        // Save position to restore if we don't have enough data
+        let start_position = src.position();
+        
+        let fix_header = match decode_fix_header(src) {
+            Some(header) => header,
+            None => return Err(Error::Incomplete(1)),
+        };
+        
+        // Check if we have enough bytes to read the remaining length
+        if !src.has_remaining() {
+            src.set_position(start_position);
+            return Err(Error::Incomplete(1));
+        }
         
         // Read and decode the remaining length (variable byte integer)
         // This tells us how many bytes follow in the variable header + payload
-        let _remaining_length = VariableByteInteger::from(src);
+        let remaining_length = VariableByteInteger::from(src);
+        let packet_data_len = remaining_length.data as usize;
+        
+        // Get current position and ensure we have enough data
+        let current_pos = src.position() as usize;
+        
+        if buffer_len < current_pos + packet_data_len {
+            // Not enough data - reset position and return Incomplete
+            let needed = packet_data_len - (buffer_len - current_pos);
+            src.set_position(start_position);
+            return Err(Error::Incomplete(needed));
+        }
+        
+        // Create a bounded sub-cursor containing only this packet's data
+        // This prevents decoders from reading into the next packet
+        let packet_slice = &src.get_ref()[current_pos..current_pos + packet_data_len];
+        let mut packet_cursor = Cursor::new(packet_slice);
         
         let control_packet_type = fix_header.control_packet_type;
         let qos = fix_header.flags.1; // Extract QoS from flags
         let control_packet = match control_packet_type {
-            ControlPacketType::CONNECT => ControlPacket::Connect(decode_connect_packet(src)?),
-            ControlPacketType::PUBLISH => ControlPacket::Publish(decode_publish_packet(src, qos)?),
-            ControlPacketType::PUBACK => ControlPacket::PubAck(decode_pub_ack_packet(src)?),
-            ControlPacketType::PUBREC => ControlPacket::PubRec(decode_pub_rec_packet(src)?),
-            ControlPacketType::PUBREL => ControlPacket::PubRel(decode_pub_rel_packet(src)?),
-            ControlPacketType::PUBCOMP => ControlPacket::PubComp(decode_pub_comp_packet(src)?),
-            ControlPacketType::SUBSCRIBE => ControlPacket::Subscribe(decode_subscribe_packet(src)?),
+            ControlPacketType::CONNECT => ControlPacket::Connect(decode_connect_packet(&mut packet_cursor)?),
+            ControlPacketType::PUBLISH => ControlPacket::Publish(decode_publish_packet(&mut packet_cursor, qos)?),
+            ControlPacketType::PUBACK => ControlPacket::PubAck(decode_pub_ack_packet(&mut packet_cursor)?),
+            ControlPacketType::PUBREC => ControlPacket::PubRec(decode_pub_rec_packet(&mut packet_cursor)?),
+            ControlPacketType::PUBREL => ControlPacket::PubRel(decode_pub_rel_packet(&mut packet_cursor)?),
+            ControlPacketType::PUBCOMP => ControlPacket::PubComp(decode_pub_comp_packet(&mut packet_cursor)?),
+            ControlPacketType::SUBSCRIBE => ControlPacket::Subscribe(decode_subscribe_packet(&mut packet_cursor)?),
             ControlPacketType::UNSUBSCRIBE => {
                 // UNSUBSCRIBE not implemented yet - return unit
                 ControlPacket::Unsubscribe(())
             }
             ControlPacketType::PINGREQ => ControlPacket::PingReq,
             ControlPacketType::DISCONNECT => {
-                let _ = decode_disconnect_packet(src)?;
+                let _ = decode_disconnect_packet(&mut packet_cursor)?;
                 ControlPacket::Disconnect(())
             }
             _ => return Err(Error::Other(format!("Unsupported packet type: {:?}", control_packet_type))),
         };
+        
+        // Advance the main cursor past this packet's data
+        src.set_position((current_pos + packet_data_len) as u64);
 
         Ok(Frame { fix_header, control_packet })
     }
