@@ -1,5 +1,7 @@
 use crate::{
     broker::{BrokerMessage, PublishMessage},
+    message_state::MessageStateTracker,
+    packet_id::PacketIdManager,
     protocol::{
         definitions::*,
         frame::{ControlPacket, Error, Frame},
@@ -23,6 +25,9 @@ pub struct Client {
     broker_sender: Sender<BrokerMessage>,
     #[allow(dead_code)]
     message_receiver: Receiver<PublishMessage>,
+    // QoS management
+    packet_id_manager: PacketIdManager,
+    message_state_tracker: MessageStateTracker,
 }
 
 impl Client {
@@ -38,6 +43,8 @@ impl Client {
             id: String::from(""),
             broker_sender,
             message_receiver: msg_receiver,
+            packet_id_manager: PacketIdManager::new(),
+            message_state_tracker: MessageStateTracker::new(),
         }
     }
 
@@ -148,6 +155,17 @@ impl Client {
         match msg.control_packet {
             ControlPacket::Connect(control_packet) => {
                 self.id = control_packet.payload.client_identifier.clone();
+                
+                // Generate client ID if empty (MQTT 3.1.1 allows empty client_id for clean session)
+                if self.id.is_empty() {
+                    use std::time::{SystemTime, UNIX_EPOCH};
+                    let timestamp = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_micros();
+                    self.id = format!("auto-{}", timestamp);
+                }
+                
                 println!("Client connected with ID: {}", self.id);
                 
                 // Register with broker
@@ -174,7 +192,7 @@ impl Client {
                 
                 // Send to broker for distribution
                 let _ = self.broker_sender.send(BrokerMessage::Publish(PublishMessage {
-                    topic,
+                    topic: topic.clone(),
                     payload,
                     qos,
                     retain,
@@ -183,48 +201,116 @@ impl Client {
                 // Send acknowledgment based on QoS
                 match qos {
                     1 => {
-                        let pub_ack = Frame {
-                            fix_header: FixHeader::new(ControlPacketType::PUBACK, Flags(0, 0, 0, 0)),
-                            control_packet: ControlPacket::PubAck(PubAckControlPacket {
-                                variable_header: PubAckVariableHeader::from(
-                                    control_packet.variable_header.packet_identifier.unwrap(),
-                                    PubAckReasonCode::Success,
-                                    Vec::new(),
-                                ),
-                            }),
-                        };
-                        self.write_value(&mut Frame::serialize(pub_ack).unwrap()).await.unwrap();
+                        // QoS 1: Send PUBACK
+                        if let Some(packet_id) = control_packet.variable_header.packet_identifier {
+                            let pub_ack = Frame {
+                                fix_header: FixHeader::new(ControlPacketType::PUBACK, Flags(0, 0, 0, 0)),
+                                control_packet: ControlPacket::PubAck(PubAckControlPacket {
+                                    variable_header: PubAckVariableHeader::from(
+                                        packet_id,
+                                        PubAckReasonCode::Success,
+                                        Vec::new(),
+                                    ),
+                                }),
+                            };
+                            self.write_value(&mut Frame::serialize(pub_ack).unwrap()).await.unwrap();
+                        }
                     }
                     2 => {
-                        let pub_rec = Frame {
-                            fix_header: FixHeader::new(ControlPacketType::PUBREC, Flags(0, 0, 0, 0)),
-                            control_packet: ControlPacket::PubRec(PubRecControlPacket {
-                                variable_header: PubRecVariableHeader::from(
-                                    control_packet.variable_header.packet_identifier.unwrap(),
-                                    PubRecReasonCode::Success,
-                                    Vec::new(),
-                                ),
-                            }),
-                        };
-                        self.write_value(&mut Frame::serialize(pub_rec).unwrap()).await.unwrap();
+                        // QoS 2: Send PUBREC, track state
+                        if let Some(packet_id) = control_packet.variable_header.packet_identifier {
+                            self.message_state_tracker.mark_received_publish_qos2(packet_id, topic);
+                            
+                            let pub_rec = Frame {
+                                fix_header: FixHeader::new(ControlPacketType::PUBREC, Flags(0, 0, 0, 0)),
+                                control_packet: ControlPacket::PubRec(PubRecControlPacket {
+                                    variable_header: PubRecVariableHeader::from(
+                                        packet_id,
+                                        PubRecReasonCode::Success,
+                                        Vec::new(),
+                                    ),
+                                }),
+                            };
+                            self.write_value(&mut Frame::serialize(pub_rec).unwrap()).await.unwrap();
+                        }
                     }
-                    _ => {}
+                    _ => {} // QoS 0 - no acknowledgment needed
+                }
+                true
+            }
+            
+            ControlPacket::PubAck(control_packet) => {
+                // Received PUBACK for our outgoing QoS 1 message
+                let packet_id = control_packet.variable_header.packet_identifier;
+                println!("Received PUBACK for packet_id={}", packet_id);
+                
+                if self.message_state_tracker.handle_puback(packet_id) {
+                    self.packet_id_manager.release(packet_id);
+                    println!("QoS 1 message {} acknowledged", packet_id);
+                } else {
+                    println!("Warning: Received PUBACK for unknown packet_id={}", packet_id);
+                }
+                true
+            }
+            
+            ControlPacket::PubRec(control_packet) => {
+                // Received PUBREC for our outgoing QoS 2 message - send PUBREL
+                let packet_id = control_packet.variable_header.packet_identifier;
+                println!("Received PUBREC for packet_id={}", packet_id);
+                
+                if self.message_state_tracker.handle_pubrec(packet_id) {
+                    // Send PUBREL
+                    let pub_rel = Frame {
+                        fix_header: FixHeader::new(ControlPacketType::PUBREL, Flags(0, 1, 0, 0)), // QoS 1 for PUBREL
+                        control_packet: ControlPacket::PubRel(PubRelControlPacket {
+                            variable_header: PubRelVariableHeader::from(
+                                packet_id,
+                                PubRelReasonCode::Success,
+                                Vec::new(),
+                            ),
+                        }),
+                    };
+                    self.write_value(&mut Frame::serialize(pub_rel).unwrap()).await.unwrap();
+                    println!("Sent PUBREL for packet_id={}", packet_id);
+                } else {
+                    println!("Warning: Received PUBREC for unknown packet_id={}", packet_id);
                 }
                 true
             }
             
             ControlPacket::PubRel(control_packet) => {
+                // Received PUBREL for incoming QoS 2 message - send PUBCOMP
+                let packet_id = control_packet.variable_header.packet_identifier;
+                println!("Received PUBREL for packet_id={}", packet_id);
+                
+                self.message_state_tracker.handle_pubrel(packet_id);
+                
                 let pub_comp = Frame {
                     fix_header: FixHeader::new(ControlPacketType::PUBCOMP, Flags(0, 0, 0, 0)),
                     control_packet: ControlPacket::PubComp(PubCompControlPacket {
                         variable_header: PubCompVariableHeader::from(
-                            control_packet.variable_header.packet_identifier,
+                            packet_id,
                             PubCompReasonCode::Success,
                             Vec::new(),
                         ),
                     }),
                 };
                 self.write_value(&mut Frame::serialize(pub_comp).unwrap()).await.unwrap();
+                println!("Sent PUBCOMP for packet_id={}", packet_id);
+                true
+            }
+            
+            ControlPacket::PubComp(control_packet) => {
+                // Received PUBCOMP - QoS 2 flow complete
+                let packet_id = control_packet.variable_header.packet_identifier;
+                println!("Received PUBCOMP for packet_id={}", packet_id);
+                
+                if self.message_state_tracker.handle_pubcomp(packet_id) {
+                    self.packet_id_manager.release(packet_id);
+                    println!("QoS 2 message {} completed", packet_id);
+                } else {
+                    println!("Warning: Received PUBCOMP for unknown packet_id={}", packet_id);
+                }
                 true
             }
             
@@ -242,10 +328,16 @@ impl Client {
                     topics,
                 }).await;
                 
-                // Send SUBACK
+                // Send SUBACK with granted QoS levels matching the requested ones
                 let mut sub_ack_payload = SubAckPayload::default();
-                for _ in &control_packet.variable_header.subscribe_payload {
-                    sub_ack_payload.sub_ack_reason_codes.push(SubAckReasonCode::GrantedQoS0);
+                for sub in &control_packet.variable_header.subscribe_payload {
+                    // Grant the requested QoS level
+                    let granted_qos = match sub.subscription_options.maximum_qos {
+                        Qos::AtMostOnce => SubAckReasonCode::GrantedQoS0,
+                        Qos::AtleastOnce => SubAckReasonCode::GrantedQoS1,
+                        Qos::ExactlyOnce => SubAckReasonCode::GrantedQoS2,
+                    };
+                    sub_ack_payload.sub_ack_reason_codes.push(granted_qos);
                 }
                 
                 let sub_ack = Frame {
@@ -282,18 +374,54 @@ impl Client {
     }
     
     async fn send_publish_to_client(&mut self, msg: PublishMessage) -> Result<(), Box<dyn std::error::Error>> {
-        println!("Sending PUBLISH to client {}: topic={}", self.id, msg.topic);
+        println!("Sending PUBLISH to client {}: topic={}, qos={}", self.id, msg.topic, msg.qos);
         
         let mut publish_packet = PublishControlPacket {
             variable_header: PublishVariableHeader::new(),
             payload: PublishPayload {
-                data: bytes::Bytes::from(msg.payload),
+                data: bytes::Bytes::from(msg.payload.clone()),
             },
         };
         
         // Update topic name
-        publish_packet.variable_header.topic_name = msg.topic;
-        publish_packet.variable_header.packet_identifier = None; // QoS 0 for now
+        publish_packet.variable_header.topic_name = msg.topic.clone();
+        
+        // Allocate packet ID for QoS 1 and 2
+        let packet_id = if msg.qos > 0 {
+            match self.packet_id_manager.allocate() {
+                Some(id) => {
+                    // Track the message state
+                    match msg.qos {
+                        1 => {
+                            self.message_state_tracker.track_qos1(
+                                id,
+                                msg.topic.clone(),
+                                msg.payload.clone(),
+                                msg.retain,
+                            );
+                        }
+                        2 => {
+                            self.message_state_tracker.track_qos2(
+                                id,
+                                msg.topic.clone(),
+                                msg.payload.clone(),
+                                msg.retain,
+                            );
+                        }
+                        _ => {}
+                    }
+                    Some(id)
+                }
+                None => {
+                    println!("Warning: No packet IDs available, cannot send QoS {} message", msg.qos);
+                    return Ok(());
+                }
+            }
+        } else {
+            None
+        };
+        
+        publish_packet.variable_header.packet_identifier = packet_id;
         
         let frame = Frame {
             fix_header: FixHeader::new(ControlPacketType::PUBLISH, Flags(
@@ -306,6 +434,11 @@ impl Client {
         };
         
         self.write_value(&mut Frame::serialize(frame)?).await?;
+        
+        if let Some(id) = packet_id {
+            println!("Sent QoS {} PUBLISH with packet_id={}", msg.qos, id);
+        }
+        
         Ok(())
     }
 }

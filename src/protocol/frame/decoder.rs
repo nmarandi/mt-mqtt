@@ -70,7 +70,9 @@ pub fn decode_publish_variable_header(src: &mut Cursor<&[u8]>, qos: u8) -> Resul
     } else {
         publish_variable_header.packet_identifier = None;
     }
-    publish_variable_header.set_properties(decode_properties(src)?);
+    // Properties only exist in MQTT 5.0, not in MQTT 3.1.1
+    // For MQTT 3.1.1, set empty properties
+    publish_variable_header.set_properties(Vec::new());
     Ok(publish_variable_header)
 }
 pub fn decode_publish_payload(src: &mut Cursor<&[u8]>) -> Result<PublishPayload, Error> {
@@ -101,6 +103,66 @@ pub fn decode_pub_rel_variable_header(src: &mut Cursor<&[u8]>) -> Result<PubRelV
     Ok(pub_rel_variable_header)
 }
 
+pub fn decode_pub_ack_packet(src: &mut Cursor<&[u8]>) -> Result<PubAckControlPacket, Error> {
+    let mut pub_ack_control_packet: PubAckControlPacket = Default::default();
+    pub_ack_control_packet.variable_header = decode_pub_ack_variable_header(src)?;
+    Ok(pub_ack_control_packet)
+}
+pub fn decode_pub_ack_variable_header(src: &mut Cursor<&[u8]>) -> Result<PubAckVariableHeader, Error> {
+    let mut pub_ack_variable_header: PubAckVariableHeader = Default::default();
+    pub_ack_variable_header.packet_identifier = src.get_u16();
+    if src.has_remaining() {
+        pub_ack_variable_header.reason_code = PubAckReasonCode::from_u8(src.get_u8())
+            .ok_or_else(|| Error::Other("Invalid PubAck reason code".to_string()))?;
+        if src.has_remaining() {
+            pub_ack_variable_header.set_properties(decode_properties(src)?);
+        }
+    } else {
+        pub_ack_variable_header.reason_code = PubAckReasonCode::Success;
+    }
+    Ok(pub_ack_variable_header)
+}
+
+pub fn decode_pub_rec_packet(src: &mut Cursor<&[u8]>) -> Result<PubRecControlPacket, Error> {
+    let mut pub_rec_control_packet: PubRecControlPacket = Default::default();
+    pub_rec_control_packet.variable_header = decode_pub_rec_variable_header(src)?;
+    Ok(pub_rec_control_packet)
+}
+pub fn decode_pub_rec_variable_header(src: &mut Cursor<&[u8]>) -> Result<PubRecVariableHeader, Error> {
+    let mut pub_rec_variable_header: PubRecVariableHeader = Default::default();
+    pub_rec_variable_header.packet_identifier = src.get_u16();
+    if src.has_remaining() {
+        pub_rec_variable_header.reason_code = PubRecReasonCode::from_u8(src.get_u8())
+            .ok_or_else(|| Error::Other("Invalid PubRec reason code".to_string()))?;
+        if src.has_remaining() {
+            pub_rec_variable_header.set_properties(decode_properties(src)?);
+        }
+    } else {
+        pub_rec_variable_header.reason_code = PubRecReasonCode::Success;
+    }
+    Ok(pub_rec_variable_header)
+}
+
+pub fn decode_pub_comp_packet(src: &mut Cursor<&[u8]>) -> Result<PubCompControlPacket, Error> {
+    let mut pub_comp_control_packet: PubCompControlPacket = Default::default();
+    pub_comp_control_packet.variable_header = decode_pub_comp_variable_header(src)?;
+    Ok(pub_comp_control_packet)
+}
+pub fn decode_pub_comp_variable_header(src: &mut Cursor<&[u8]>) -> Result<PubCompVariableHeader, Error> {
+    let mut pub_comp_variable_header: PubCompVariableHeader = Default::default();
+    pub_comp_variable_header.packet_identifier = src.get_u16();
+    if src.has_remaining() {
+        pub_comp_variable_header.reason_code = PubCompReasonCode::from_u8(src.get_u8())
+            .ok_or_else(|| Error::Other("Invalid PubComp reason code".to_string()))?;
+        if src.has_remaining() {
+            pub_comp_variable_header.set_properties(decode_properties(src)?);
+        }
+    } else {
+        pub_comp_variable_header.reason_code = PubCompReasonCode::Success;
+    }
+    Ok(pub_comp_variable_header)
+}
+
 pub fn decode_subscribe_packet(src: &mut Cursor<&[u8]>) -> Result<SubscribeControlPacket, Error> {
     let mut pub_rel_control_packet: SubscribeControlPacket = Default::default();
     pub_rel_control_packet.variable_header = decode_subscribe_variable_header(src)?;
@@ -109,7 +171,9 @@ pub fn decode_subscribe_packet(src: &mut Cursor<&[u8]>) -> Result<SubscribeContr
 pub fn decode_subscribe_variable_header(src: &mut Cursor<&[u8]>) -> Result<SubscribeVariableHeader, Error> {
     let mut subscribe_variable_header: SubscribeVariableHeader = Default::default();
     subscribe_variable_header.packet_identifier = src.get_u16();
-    subscribe_variable_header.set_properties(decode_properties(src)?);
+    // Properties only exist in MQTT 5.0, not in MQTT 3.1.1
+    // For MQTT 3.1.1, set empty properties
+    subscribe_variable_header.set_properties(Vec::new());
     subscribe_variable_header.subscribe_payload = decode_subscribe_payload(src)?;
     Ok(subscribe_variable_header)
 }
@@ -193,6 +257,12 @@ pub fn decode_binary_data(src: &mut Cursor<&[u8]>) -> Result<Bytes, Error> {
 pub fn decode_properties(src: &mut Cursor<&[u8]>) -> Result<Vec<Option<Property>>, Error> {
     let variable_byte_integer = VariableByteInteger::from(src);
     let lenght = variable_byte_integer.data as u64;
+    
+    // If property length is 0, return empty properties
+    if lenght == 0 {
+        return Ok(Vec::new());
+    }
+    
     let mut properties: Vec<Option<Property>> = Vec::new();
     let current_pos = src.position();
     while src.position() - current_pos < lenght {

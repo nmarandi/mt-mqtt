@@ -3,14 +3,29 @@
 # Test Wildcard Subscriptions
 echo "=== Test 2: Wildcard Subscriptions ==="
 
+# MQTT Protocol version (default: 311 for MQTT 3.1.1, use 5 for MQTT 5.0)
+MQTT_VERSION="${1:-311}"
+echo "Using MQTT protocol version: $MQTT_VERSION"
+
+# Mosquitto installation directory (can be overridden)
+MOSQUITTO_DIR="${MOSQUITTO_DIR:-C:\Program Files\mosquitto}"
+MOSQUITTO_PUB="$MOSQUITTO_DIR/mosquitto_pub.exe"
+MOSQUITTO_SUB="$MOSQUITTO_DIR/mosquitto_sub.exe"
+
+# Fall back to command if exe files don't exist (Linux/macOS)
+if [ ! -f "$MOSQUITTO_PUB" ]; then
+    MOSQUITTO_PUB="mosquitto_pub"
+    MOSQUITTO_SUB="mosquitto_sub"
+fi
+
 # Test multi-level wildcard (#)
 echo "Testing multi-level wildcard (#)..."
-"C:\Program Files\mosquitto\mosquitto_sub.exe" -h localhost -p 1883 -t "sensor/#" -v > /tmp/wildcard_output.txt &
+"$MOSQUITTO_SUB" -h localhost -p 1883 -V $MQTT_VERSION -t "sensor/#" -v > /tmp/wildcard_output.txt &
 SUB_PID=$!
 sleep 1
 
-"C:\Program Files\mosquitto\mosquitto_pub.exe" -h localhost -p 1883 -t "sensor/temp" -m "20"
-"C:\Program Files\mosquitto\mosquitto_pub.exe" -h localhost -p 1883 -t "sensor/humidity/room1" -m "65"
+"$MOSQUITTO_PUB" -h localhost -p 1883 -V $MQTT_VERSION -t "sensor/temp" -m "20"
+"$MOSQUITTO_PUB" -h localhost -p 1883 -V $MQTT_VERSION -t "sensor/humidity/room1" -m "65"
 sleep 1
 
 if grep -q "sensor/temp 20" /tmp/wildcard_output.txt && \
@@ -27,12 +42,12 @@ rm -f /tmp/wildcard_output.txt
 
 # Test single-level wildcard (+)
 echo "Testing single-level wildcard (+)..."
-"C:\Program Files\mosquitto\mosquitto_sub.exe" -h localhost -p 1883 -t "device/+/status" -v > /tmp/wildcard_output.txt &
+"$MOSQUITTO_SUB" -h localhost -p 1883 -V $MQTT_VERSION -t "device/+/status" -v > /tmp/wildcard_output.txt &
 SUB_PID=$!
 sleep 1
 
-"C:\Program Files\mosquitto\mosquitto_pub.exe" -h localhost -p 1883 -t "device/123/status" -m "online"
-"C:\Program Files\mosquitto\mosquitto_pub.exe" -h localhost -p 1883 -t "device/456/status" -m "offline"
+"$MOSQUITTO_PUB" -h localhost -p 1883 -V $MQTT_VERSION -t "device/123/status" -m "online"
+"$MOSQUITTO_PUB" -h localhost -p 1883 -V $MQTT_VERSION -t "device/456/status" -m "offline"
 sleep 1
 
 if grep -q "device/123/status online" /tmp/wildcard_output.txt && \

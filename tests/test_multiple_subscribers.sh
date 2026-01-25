@@ -3,20 +3,35 @@
 # Test Multiple Subscribers
 echo "=== Test 3: Multiple Subscribers ==="
 
+# MQTT Protocol version (default: 311 for MQTT 3.1.1, use 5 for MQTT 5.0)
+MQTT_VERSION="${1:-311}"
+echo "Using MQTT protocol version: $MQTT_VERSION"
+
+# Mosquitto installation directory (can be overridden)
+MOSQUITTO_DIR="${MOSQUITTO_DIR:-C:\Program Files\mosquitto}"
+MOSQUITTO_PUB="$MOSQUITTO_DIR/mosquitto_pub.exe"
+MOSQUITTO_SUB="$MOSQUITTO_DIR/mosquitto_sub.exe"
+
+# Fall back to command if exe files don't exist (Linux/macOS)
+if [ ! -f "$MOSQUITTO_PUB" ]; then
+    MOSQUITTO_PUB="mosquitto_pub"
+    MOSQUITTO_SUB="mosquitto_sub"
+fi
+
 # Start multiple subscribers
-"C:\Program Files\mosquitto\mosquitto_sub.exe" -h localhost -p 1883 -t "broadcast" -v > /tmp/sub1_output.txt &
+"$MOSQUITTO_SUB" -h localhost -p 1883 -V $MQTT_VERSION -t "broadcast" -v > /tmp/sub1_output.txt &
 SUB1_PID=$!
 
-"C:\Program Files\mosquitto\mosquitto_sub.exe" -h localhost -p 1883 -t "broadcast" -v > /tmp/sub2_output.txt &
+"$MOSQUITTO_SUB" -h localhost -p 1883 -V $MQTT_VERSION -t "broadcast" -v > /tmp/sub2_output.txt &
 SUB2_PID=$!
 
-"C:\Program Files\mosquitto\mosquitto_sub.exe" -h localhost -p 1883 -t "broadcast" -v > /tmp/sub3_output.txt &
+"$MOSQUITTO_SUB" -h localhost -p 1883 -V $MQTT_VERSION -t "broadcast" -v > /tmp/sub3_output.txt &
 SUB3_PID=$!
 
 sleep 1
 
 # Publish one message
-"C:\Program Files\mosquitto\mosquitto_pub.exe" -h localhost -p 1883 -t "broadcast" -m "Message to all"
+"$MOSQUITTO_PUB" -h localhost -p 1883 -V $MQTT_VERSION -t "broadcast" -m "Message to all"
 
 sleep 1
 

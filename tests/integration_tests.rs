@@ -313,3 +313,97 @@ async fn test_clear_retained_message() {
     let result = timeout(Duration::from_millis(100), client_rx.recv()).await;
     assert!(result.is_err(), "Should not receive cleared retained message");
 }
+
+#[tokio::test]
+async fn test_qos1_publish() {
+    // Create broker
+    let broker = Broker::new();
+    let broker_tx = broker.get_sender();
+    let (client_tx, mut client_rx) = mpsc::channel(100);
+    
+    // Spawn broker task
+    tokio::spawn(async move {
+        broker.run().await;
+    });
+    
+    // Connect client
+    broker_tx.send(BrokerMessage::Connect {
+        client_id: "test_client".to_string(),
+        sender: client_tx.clone(),
+    }).await.unwrap();
+    
+    tokio::time::sleep(Duration::from_millis(10)).await;
+    
+    // Subscribe to topic
+    broker_tx.send(BrokerMessage::Subscribe {
+        client_id: "test_client".to_string(),
+        topics: vec!["qos/test".to_string()],
+    }).await.unwrap();
+    
+    tokio::time::sleep(Duration::from_millis(10)).await;
+    
+    // Publish QoS 1 message
+    broker_tx.send(BrokerMessage::Publish(PublishMessage {
+        topic: "qos/test".to_string(),
+        payload: b"QoS 1 message".to_vec(),
+        qos: 1,
+        retain: false,
+    })).await.unwrap();
+    
+    // Should receive the message with QoS 1
+    let msg = timeout(Duration::from_millis(100), client_rx.recv())
+        .await
+        .expect("Should receive message")
+        .expect("Message should not be None");
+    
+    assert_eq!(msg.topic, "qos/test");
+    assert_eq!(msg.payload, b"QoS 1 message");
+    assert_eq!(msg.qos, 1);
+}
+
+#[tokio::test]
+async fn test_qos2_publish() {
+    // Create broker
+    let broker = Broker::new();
+    let broker_tx = broker.get_sender();
+    let (client_tx, mut client_rx) = mpsc::channel(100);
+    
+    // Spawn broker task
+    tokio::spawn(async move {
+        broker.run().await;
+    });
+    
+    // Connect client
+    broker_tx.send(BrokerMessage::Connect {
+        client_id: "test_client".to_string(),
+        sender: client_tx.clone(),
+    }).await.unwrap();
+    
+    tokio::time::sleep(Duration::from_millis(10)).await;
+    
+    // Subscribe to topic
+    broker_tx.send(BrokerMessage::Subscribe {
+        client_id: "test_client".to_string(),
+        topics: vec!["qos2/test".to_string()],
+    }).await.unwrap();
+    
+    tokio::time::sleep(Duration::from_millis(10)).await;
+    
+    // Publish QoS 2 message
+    broker_tx.send(BrokerMessage::Publish(PublishMessage {
+        topic: "qos2/test".to_string(),
+        payload: b"QoS 2 message".to_vec(),
+        qos: 2,
+        retain: false,
+    })).await.unwrap();
+    
+    // Should receive the message with QoS 2
+    let msg = timeout(Duration::from_millis(100), client_rx.recv())
+        .await
+        .expect("Should receive message")
+        .expect("Message should not be None");
+    
+    assert_eq!(msg.topic, "qos2/test");
+    assert_eq!(msg.payload, b"QoS 2 message");
+    assert_eq!(msg.qos, 2);
+}

@@ -5,18 +5,9 @@ echo "MT-MQTT Broker Integration Test Suite"
 echo "========================================="
 echo ""
 
-# Check if broker is running (Windows-compatible)
-# Try using timeout command which is available in Git Bash on Windows
-if timeout 1 bash -c "</dev/tcp/localhost/1883" 2>/dev/null; then
-    echo "✅ Broker is running on port 1883"
-elif command -v nc >/dev/null 2>&1 && nc -z localhost 1883 2>/dev/null; then
-    echo "✅ Broker is running on port 1883"
-else
-    echo "⚠️  Warning: Could not verify broker status"
-    echo "   Assuming broker is running and continuing tests..."
-    echo "   If tests fail, make sure broker is running: cargo run --bin mt-mqtt"
-fi
-
+# MQTT Protocol version (default: 311 for MQTT 3.1.1, use 5 for MQTT 5.0)
+MQTT_VERSION="${1:-311}"
+echo "MQTT Protocol Version: $MQTT_VERSION"
 echo ""
 
 TOTAL=0
@@ -28,7 +19,7 @@ for test_script in test_*.sh; do
     if [ -f "$test_script" ]; then
         TOTAL=$((TOTAL + 1))
         
-        bash "$test_script"
+        bash "$test_script" "$MQTT_VERSION"
         
         if [ $? -eq 0 ]; then
             PASSED=$((PASSED + 1))

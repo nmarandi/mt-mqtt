@@ -1,5 +1,7 @@
 pub mod broker;
 mod client;
+mod message_state;
+mod packet_id;
 mod protocol;
 mod server;
 pub mod topic;

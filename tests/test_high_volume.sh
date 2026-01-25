@@ -3,8 +3,23 @@
 # Test High Volume Messages
 echo "=== Test 5: High Volume Messages ==="
 
+# MQTT Protocol version (default: 311 for MQTT 3.1.1, use 5 for MQTT 5.0)
+MQTT_VERSION="${1:-311}"
+echo "Using MQTT protocol version: $MQTT_VERSION"
+
+# Mosquitto installation directory (can be overridden)
+MOSQUITTO_DIR="${MOSQUITTO_DIR:-C:\Program Files\mosquitto}"
+MOSQUITTO_PUB="$MOSQUITTO_DIR/mosquitto_pub.exe"
+MOSQUITTO_SUB="$MOSQUITTO_DIR/mosquitto_sub.exe"
+
+# Fall back to command if exe files don't exist (Linux/macOS)
+if [ ! -f "$MOSQUITTO_PUB" ]; then
+    MOSQUITTO_PUB="mosquitto_pub"
+    MOSQUITTO_SUB="mosquitto_sub"
+fi
+
 # Start subscriber
-"C:\Program Files\mosquitto\mosquitto_sub.exe" -h localhost -p 1883 -t "volume/test" -v > /tmp/volume_output.txt &
+"$MOSQUITTO_SUB" -h localhost -p 1883 -V $MQTT_VERSION -t "volume/test" -v > /tmp/volume_output.txt &
 SUB_PID=$!
 
 sleep 1
@@ -12,7 +27,7 @@ sleep 1
 # Publish 100 messages
 echo "Publishing 100 messages..."
 for i in {1..100}; do
-    "C:\Program Files\mosquitto\mosquitto_pub.exe" -h localhost -p 1883 -t "volume/test" -m "Message $i"
+    "$MOSQUITTO_PUB" -h localhost -p 1883 -V $MQTT_VERSION -t "volume/test" -m "Message $i"
     if [ $((i % 10)) -eq 0 ]; then
         echo -ne "Published $i messages\r"
     fi

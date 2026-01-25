@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
-[![Tests](https://img.shields.io/badge/tests-31%2F31%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-39%2F39%20passing-brightgreen.svg)](#testing)
 
 A high-performance, async MQTT broker implementation in Rust built with Tokio. Designed for reliability, scalability, and MQTT 3.1.1 protocol compliance.
 
@@ -12,17 +12,22 @@ A high-performance, async MQTT broker implementation in Rust built with Tokio. D
 
 | Metric | Status |
 |--------|--------|
-| **Unit Tests** | 25/25 passing (100%) |
-| **Integration Tests** | 6/6 passing (100%) |
-| **Protocol Coverage** | MQTT 3.1.1 QoS 0 ✅ |
-| **Production Ready** | Core features stable, QoS 1/2 in development |
+| **Unit Tests** | 31/31 passing (100%) |
+| **Integration Tests** | 8/8 passing (100%) |
+| **Protocol Coverage** | MQTT 3.1.1 QoS 0, 1, 2 ✅ |
+| **Production Ready** | Core features stable, advanced features in development |
 
 ## ✨ Features
 
 ### ✅ Currently Implemented
 - **Asynchronous I/O** - Built on Tokio for high concurrency
-- **MQTT 3.1.1 Protocol** - Full QoS 0 support
+- **MQTT 3.1.1 Protocol** - Full QoS 0, 1, 2 support
 - **TCP Server** - Listening on port 1883
+- **QoS 0** - At-most-once delivery (fire and forget)
+- **QoS 1** - At-least-once delivery with PUBACK acknowledgment
+- **QoS 2** - Exactly-once delivery with 4-way handshake (PUBREC, PUBREL, PUBCOMP)
+- **Packet Identifier Management** - Automatic ID allocation and tracking
+- **Message State Tracking** - In-flight message management for reliable delivery
 - **Wildcard Subscriptions** - Full support for `+` (single-level) and `#` (multi-level)
 - **Retained Messages** - Last known good value delivery
 - **Multi-Subscriber** - Efficient message fanout to multiple clients
@@ -31,8 +36,6 @@ A high-performance, async MQTT broker implementation in Rust built with Tokio. D
 - **Clean Disconnect** - Graceful connection termination
 
 ### 🚧 Planned Features
-- **QoS 1** - At-least-once delivery with acknowledgment
-- **QoS 2** - Exactly-once delivery with four-way handshake
 - **Persistent Sessions** - Session state preservation across reconnects
 - **Will Messages** - Last will and testament on abnormal disconnect
 - **Authentication** - Username/password with ACL support
@@ -88,8 +91,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### Publish a Message
 ```bash
-# Using mosquitto_pub
+# Using mosquitto_pub - QoS 0 (default)
 mosquitto_pub -h localhost -p 1883 -t "sensor/temperature" -m "23.5"
+
+# QoS 1 - At-least-once delivery
+mosquitto_pub -h localhost -p 1883 -t "sensor/temperature" -m "23.5" -q 1
+
+# QoS 2 - Exactly-once delivery
+mosquitto_pub -h localhost -p 1883 -t "sensor/temperature" -m "23.5" -q 2
 ```
 
 ### Subscribe to Topics
@@ -184,25 +193,61 @@ cargo test -- --nocapture
 
 ### Test Coverage
 ```
-✅ Unit Tests: 25/25 passing (100%)
+✅ Unit Tests: 31/31 passing (100%)
    ├─ TopicTree tests: 13/13
    ├─ Protocol tests: 9/9
+   ├─ Packet ID tests: 3/3
+   ├─ Message State tests: 3/3
    └─ Core tests: 3/3
 
-✅ Integration Tests: 6/6 passing (100%)
+✅ Integration Tests: 8/8 passing (100%)
    ├─ Broker routing
    ├─ Wildcard subscriptions
    ├─ Multiple subscribers
    ├─ Unsubscribe
    ├─ Retained messages
-   └─ Clear retained messages
+   ├─ Clear retained messages
+   ├─ QoS 1 publish
+   └─ QoS 2 publish
 ```
 
 ### E2E Testing with Mosquitto
+
+The E2E tests require [Mosquitto](https://mosquitto.org/) client tools.
+
+**Running the broker for tests:**
 ```bash
+# Terminal 1: Start broker with visible output
+cargo run --bin mt-mqtt
+
+# Terminal 2: Run tests
 cd tests
 ./run_all_tests.sh
 ```
+
+**Windows:**
+```bash
+# Install Mosquitto from https://mosquitto.org/download/
+# Default installation: C:\Program Files\mosquitto
+
+cd tests
+./run_all_tests.sh
+
+# Or specify custom Mosquitto location:
+MOSQUITTO_DIR="/path/to/mosquitto" ./run_all_tests.sh
+```
+
+**Linux/macOS:**
+```bash
+# Install Mosquitto
+# Ubuntu/Debian: sudo apt-get install mosquitto-clients
+# macOS: brew install mosquitto
+
+cd tests
+./run_all_tests.sh
+```
+
+**Note:** Make sure the broker is running in a separate terminal to see connection logs and message activity during tests.
 
 Includes tests for:
 - Basic pub/sub
@@ -210,6 +255,7 @@ Includes tests for:
 - Multiple subscribers
 - Retained messages
 - High volume (100+ messages)
+- **QoS 0, 1, 2** message delivery
 
 ### Benchmarks
 ```bash
@@ -233,7 +279,7 @@ Performance benchmarks for:
 ## 🗺️ Roadmap
 
 ### ✅ Implemented Features
-- ✅ Core MQTT 3.1.1 protocol (QoS 0)
+- ✅ Core MQTT 3.1.1 protocol (QoS 0, 1, 2)
 - ✅ Wildcard subscriptions (`+`, `#`)
 - ✅ Retained messages
 - ✅ Subscribe/Unsubscribe
@@ -242,12 +288,14 @@ Performance benchmarks for:
 - ✅ CONNECT/CONNACK handshake
 - ✅ PINGREQ/PINGRESP keep-alive
 - ✅ Clean disconnect handling
+- ✅ Packet identifier management
+- ✅ QoS 1 acknowledgment (PUBACK)
+- ✅ QoS 2 four-way handshake (PUBREC, PUBREL, PUBCOMP)
+- ✅ Message state tracking
 
 ### 🔨 Planned for Implementation
-- [ ] **QoS 1** - At-least-once delivery with PUBACK
-- [ ] **QoS 2** - Exactly-once delivery with 4-way handshake
-- [ ] **Will Messages** - Last will and testament on abnormal disconnect
 - [ ] **Persistent Sessions** - Session state preservation across reconnects
+- [ ] **Will Messages** - Last will and testament on abnormal disconnect
 - [ ] **Message Persistence** - SQLite backend for durability
 - [ ] **Authentication & Authorization** - Username/password with ACL
 - [ ] **TLS/SSL** - Secure connections on port 8883
@@ -301,12 +349,12 @@ Early benchmarks on a typical development machine:
 
 ## 🐛 Known Limitations
 
-Current version limitations (to be addressed in Phase 3+):
-- **QoS 0 only** - No messageplanned for future implementation):
-- **QoS 0 only** - No message acknowledgment or retry
-- **No persistence** - Messages lost on broker restart
-- **No authentication** - Open connections (not suitable for production
+Current version limitations:
+- **No persistence** - Messages and sessions lost on broker restart
+- **No authentication** - Open connections (not suitable for production)
 - **In-memory only** - No disk-based message storage
+- **No will messages** - Last will and testament not yet implemented
+- **No session persistence** - Clean session only
 
 ## 📄 License
 
@@ -327,4 +375,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**Note**: This broker is under active development. The core MQTT 3.1.1 QoS 0 functionality is stable and well-tested. However, it is not recommended for production use until critical features like QoS 1/2, authentication, and persistence are implemented.
+**Note**: This broker is under active development. The core MQTT 3.1.1 QoS 0, 1, and 2 functionality is stable and well-tested. However, it is not recommended for production use until critical features like authentication, persistence, and TLS are implemented.

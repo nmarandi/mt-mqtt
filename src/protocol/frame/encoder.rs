@@ -8,26 +8,43 @@ pub fn encode_fix_header(src: FixHeader, bytes: &mut BytesMut) {
 pub fn encode_conn_ack_packet(src: ConnAckControlPacket, bytes: &mut BytesMut) {
     bytes.put_u8(src.variable_header.conn_ack_flag.session_present_flag as u8);
     bytes.put_u8(src.variable_header.reason_code.to_u8().unwrap());
-    encode_properties(src.variable_header.properties, bytes);
+    // Note: Properties are MQTT 5.0 only, omit for MQTT 3.1.1 compatibility
+}
+pub fn encode_publish_packet(src: PublishControlPacket, bytes: &mut BytesMut) {
+    // Encode topic name
+    encode_string(&src.variable_header.topic_name, bytes);
+    
+    // Encode packet identifier if QoS > 0
+    if let Some(packet_id) = src.variable_header.packet_identifier {
+        bytes.put_u16(packet_id);
+    }
+    
+    // For MQTT 3.1.1, don't encode properties (they don't exist)
+    // Properties are only in MQTT 5.0
+    // encode_properties(src.variable_header.get_properties(), bytes);
+    
+    // Encode payload
+    bytes.put_slice(&src.payload.data);
 }
 pub fn encode_pub_ack_packet(src: PubAckControlPacket, bytes: &mut BytesMut) {
     bytes.put_u16(src.variable_header.packet_identifier);
-    bytes.put_u8(src.variable_header.reason_code.to_u8().unwrap());
-    encode_properties(src.variable_header.get_properties(), bytes);
+    // Note: Reason code and properties are MQTT 5.0 only, omit for MQTT 3.1.1 compatibility
 }
 pub fn encode_pub_rec_packet(src: PubRecControlPacket, bytes: &mut BytesMut) {
     bytes.put_u16(src.variable_header.packet_identifier);
-    bytes.put_u8(src.variable_header.reason_code.to_u8().unwrap());
-    encode_properties(src.variable_header.get_properties(), bytes);
+    // Note: Reason code and properties are MQTT 5.0 only, omit for MQTT 3.1.1 compatibility
+}
+pub fn encode_pub_rel_packet(src: PubRelControlPacket, bytes: &mut BytesMut) {
+    bytes.put_u16(src.variable_header.packet_identifier);
+    // Note: Reason code and properties are MQTT 5.0 only, omit for MQTT 3.1.1 compatibility
 }
 pub fn encode_pub_comp_packet(src: PubCompControlPacket, bytes: &mut BytesMut) {
     bytes.put_u16(src.variable_header.packet_identifier);
-    bytes.put_u8(src.variable_header.reason_code.to_u8().unwrap());
-    encode_properties(src.variable_header.get_properties(), bytes);
+    // Note: Reason code and properties are MQTT 5.0 only, omit for MQTT 3.1.1 compatibility
 }
 pub fn encode_sub_ack_packet(src: SubAckControlPacket, bytes: &mut BytesMut) {
     bytes.put_u16(src.variable_header.packet_identifier);
-    encode_properties(src.variable_header.get_properties(), bytes);
+    // Note: Properties are MQTT 5.0 only, omit for MQTT 3.1.1 compatibility
     encode_sub_ack_payload(src.variable_header.sub_ack_payload, bytes);
 }
 pub fn encode_sub_ack_payload(src: SubAckPayload, bytes: &mut BytesMut) {

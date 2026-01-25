@@ -120,7 +120,10 @@ impl Frame {
         let control_packet = match control_packet_type {
             ControlPacketType::CONNECT => ControlPacket::Connect(decode_connect_packet(src)?),
             ControlPacketType::PUBLISH => ControlPacket::Publish(decode_publish_packet(src, qos)?),
+            ControlPacketType::PUBACK => ControlPacket::PubAck(decode_pub_ack_packet(src)?),
+            ControlPacketType::PUBREC => ControlPacket::PubRec(decode_pub_rec_packet(src)?),
             ControlPacketType::PUBREL => ControlPacket::PubRel(decode_pub_rel_packet(src)?),
+            ControlPacketType::PUBCOMP => ControlPacket::PubComp(decode_pub_comp_packet(src)?),
             ControlPacketType::SUBSCRIBE => ControlPacket::Subscribe(decode_subscribe_packet(src)?),
             ControlPacketType::UNSUBSCRIBE => {
                 // UNSUBSCRIBE not implemented yet - return unit
@@ -143,8 +146,10 @@ impl Frame {
         let mut payload = BytesMut::new();
         match frame.control_packet {
             ControlPacket::ConnAck(packet) => encode_conn_ack_packet(packet, &mut payload),
+            ControlPacket::Publish(packet) => encode_publish_packet(packet, &mut payload),
             ControlPacket::PubAck(packet) => encode_pub_ack_packet(packet, &mut payload),
             ControlPacket::PubRec(packet) => encode_pub_rec_packet(packet, &mut payload),
+            ControlPacket::PubRel(packet) => encode_pub_rel_packet(packet, &mut payload),
             ControlPacket::PubComp(packet) => encode_pub_comp_packet(packet, &mut payload),
             ControlPacket::SubAck(packet) => encode_sub_ack_packet(packet, &mut payload),
             ControlPacket::PingResp => {}
