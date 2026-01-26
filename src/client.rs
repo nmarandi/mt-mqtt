@@ -178,6 +178,7 @@ impl Client {
         match msg.control_packet {
             ControlPacket::Connect(control_packet) => {
                 self.id = control_packet.payload.client_identifier.clone();
+                let clean_session = control_packet.variable_header.connect_flag.clean_start;
                 
                 // Generate client ID if empty (MQTT 3.1.1 allows empty client_id for clean session)
                 if self.id.is_empty() {
@@ -189,15 +190,19 @@ impl Client {
                     self.id = format!("auto-{}", timestamp);
                 }
                 
-                tracing::info!("Client connected with ID: {}", self.id);
+                tracing::info!("Client connected with ID: {} (clean_session={})", self.id, clean_session);
                 
                 // Register with broker
                 let _ = self.broker_sender.send(BrokerMessage::Connect {
                     client_id: self.id.clone(),
+                    clean_session,
                     sender: msg_sender.clone(),
                 }).await;
                 
                 // Send CONNACK
+                // Note: For full MQTT 3.1.1 compliance, we should set session_present flag
+                // based on whether a session existed. For now, we send a basic CONNACK.
+                // TODO: Implement proper CONNACK with session_present flag
                 self.write_value(&mut Frame::serialize(Frame::new(ControlPacketType::CONNACK)).unwrap())
                     .await
                     .unwrap();

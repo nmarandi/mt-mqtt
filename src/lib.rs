@@ -4,6 +4,7 @@ mod message_state;
 mod packet_id;
 pub mod protocol;
 mod server;
+mod session;
 pub mod topic;
 
 extern crate strum;
