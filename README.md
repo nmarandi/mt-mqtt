@@ -12,8 +12,8 @@ A high-performance, async MQTT broker implementation in Rust built with Tokio. D
 
 | Metric | Status |
 |--------|--------|
-| **Unit Tests** | 31/31 passing (100%) |
-| **Integration Tests** | 8/8 passing (100%) |
+| **Unit Tests** | 38/38 passing (100%) |
+| **Integration Tests** | 10/10 passing (100%) |
 | **Protocol Coverage** | MQTT 3.1.1 QoS 0, 1, 2 ✅ |
 | **Production Ready** | Core features stable, advanced features in development |
 
@@ -34,9 +34,9 @@ A high-performance, async MQTT broker implementation in Rust built with Tokio. D
 - **Subscribe/Unsubscribe** - Complete topic management
 - **Keep-Alive** - PINGREQ/PINGRESP heartbeat
 - **Clean Disconnect** - Graceful connection termination
+- **Persistent Sessions** - Session state preservation across reconnects
 
 ### 🚧 Planned Features
-- **Persistent Sessions** - Session state preservation across reconnects
 - **Will Messages** - Last will and testament on abnormal disconnect
 - **Authentication** - Username/password with ACL support
 - **TLS/SSL** - Secure connections on port 8883
@@ -134,6 +134,24 @@ mosquitto_sub -h localhost -t "broadcast" -v
 mosquitto_pub -h localhost -t "broadcast" -m "Hello everyone!"
 ```
 
+### Persistent Sessions
+```bash
+# Subscribe with persistent session (clean_session=false)
+# Use -c flag to maintain session across reconnects
+mosquitto_sub -h localhost -p 1883 -t "sensor/data" -i "my_client" -c -q 1
+
+# Disconnect the subscriber (Ctrl+C)
+# Then publish QoS 1 messages while subscriber is offline
+mosquitto_pub -h localhost -p 1883 -t "sensor/data" -m "offline_message_1" -q 1
+mosquitto_pub -h localhost -p 1883 -t "sensor/data" -m "offline_message_2" -q 1
+
+# Reconnect with same client ID - will receive queued messages
+mosquitto_sub -h localhost -p 1883 -t "sensor/data" -i "my_client" -c -q 1
+# Output: offline_message_1, offline_message_2
+
+# Note: QoS 0 messages are NOT queued for offline clients
+```
+
 ## 🏗️ Architecture
 
 ```
@@ -193,14 +211,15 @@ cargo test -- --nocapture
 
 ### Test Coverage
 ```
-✅ Unit Tests: 31/31 passing (100%)
+✅ Unit Tests: 38/38 passing (100%)
    ├─ TopicTree tests: 13/13
    ├─ Protocol tests: 9/9
    ├─ Packet ID tests: 3/3
    ├─ Message State tests: 3/3
+   ├─ Session tests: 7/7
    └─ Core tests: 3/3
 
-✅ Integration Tests: 8/8 passing (100%)
+✅ Integration Tests: 10/10 passing (100%)
    ├─ Broker routing
    ├─ Wildcard subscriptions
    ├─ Multiple subscribers
@@ -208,6 +227,9 @@ cargo test -- --nocapture
    ├─ Retained messages
    ├─ Clear retained messages
    ├─ QoS 1 publish
+   ├─ QoS 2 publish
+   ├─ Persistent sessions
+   └─ Clean session behavior
    └─ QoS 2 publish
 ```
 
@@ -292,9 +314,9 @@ Performance benchmarks for:
 - ✅ QoS 1 acknowledgment (PUBACK)
 - ✅ QoS 2 four-way handshake (PUBREC, PUBREL, PUBCOMP)
 - ✅ Message state tracking
+- ✅ Persistent Sessions - Session state preservation across reconnects
 
 ### 🔨 Planned for Implementation
-- [ ] **Persistent Sessions** - Session state preservation across reconnects
 - [ ] **Will Messages** - Last will and testament on abnormal disconnect
 - [ ] **Message Persistence** - SQLite backend for durability
 - [ ] **Authentication & Authorization** - Username/password with ACL
@@ -350,11 +372,9 @@ Early benchmarks on a typical development machine:
 ## 🐛 Known Limitations
 
 Current version limitations:
-- **No persistence** - Messages and sessions lost on broker restart
+- **No disk persistence** - Sessions and messages lost on broker restart (in-memory only)
 - **No authentication** - Open connections (not suitable for production)
-- **In-memory only** - No disk-based message storage
 - **No will messages** - Last will and testament not yet implemented
-- **No session persistence** - Clean session only
 
 ## 📄 License
 
