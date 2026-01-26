@@ -13,7 +13,7 @@ pub struct Session {
     /// Whether this session should be persisted (clean_session = false)
     pub persistent: bool,
     /// List of topic subscriptions for this client
-    pub subscriptions: Vec<String>,
+    pub subscriptions: std::collections::HashSet<String>,
     /// Queue of pending messages for offline client (QoS 1 and 2 only)
     pub pending_messages: Vec<PublishMessage>,
     /// Packet ID manager for this session
@@ -27,7 +27,7 @@ impl Session {
         Self {
             client_id,
             persistent,
-            subscriptions: Vec::new(),
+            subscriptions: std::collections::HashSet::new(),
             pending_messages: Vec::new(),
             packet_id_manager: PacketIdManager::new(),
             message_state_tracker: MessageStateTracker::new(),
@@ -36,14 +36,12 @@ impl Session {
 
     /// Add a subscription to this session
     pub fn add_subscription(&mut self, topic: String) {
-        if !self.subscriptions.contains(&topic) {
-            self.subscriptions.push(topic);
-        }
+        self.subscriptions.insert(topic);
     }
 
     /// Remove a subscription from this session
     pub fn remove_subscription(&mut self, topic: &str) {
-        self.subscriptions.retain(|t| t != topic);
+        self.subscriptions.remove(topic);
     }
 
     /// Queue a message for offline delivery (QoS 1 and 2 only)
@@ -148,7 +146,7 @@ mod tests {
         
         session.remove_subscription("topic/1");
         assert_eq!(session.subscriptions.len(), 1);
-        assert_eq!(session.subscriptions[0], "topic/2");
+        assert!(session.subscriptions.contains("topic/2"));
     }
 
     #[test]
@@ -212,7 +210,7 @@ mod tests {
         let (session_present, session) = manager.get_or_create_session("client1".to_string(), false);
         assert!(session_present); // Session should be present
         assert_eq!(session.subscriptions.len(), 1);
-        assert_eq!(session.subscriptions[0], "topic/1");
+        assert!(session.subscriptions.contains("topic/1"));
     }
 
     #[test]

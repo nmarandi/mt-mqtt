@@ -42,13 +42,6 @@ pub enum BrokerMessage {
     Publish(PublishMessage),
 }
 
-/// Response from broker to client
-#[derive(Debug)]
-pub enum BrokerResponse {
-    /// Connection acknowledgement with session_present flag
-    ConnAck { session_present: bool },
-}
-
 
 pub struct Broker {
     // Client ID -> message sender channel
@@ -221,12 +214,10 @@ impl Broker {
                         } else if let Some(session) = self.session_manager.get_session_mut(&subscriber_id) {
                             // Client is offline but has persistent session
                             if session.persistent {
-                                // Queue message for offline delivery (QoS 1 and 2 only)
-                                if msg.qos > 0 {
-                                    session.queue_message(msg.clone());
-                                    tracing::debug!("Broker: Queued QoS {} message for offline client {}", 
-                                        msg.qos, subscriber_id);
-                                }
+                                // Queue message for offline delivery (filtering is done in queue_message)
+                                session.queue_message(msg.clone());
+                                tracing::debug!("Broker: Queued message for offline client {} (QoS {})", 
+                                    subscriber_id, msg.qos);
                             }
                         }
                     }
