@@ -21,6 +21,8 @@ pub enum BrokerMessage {
         client_id: String,
         clean_session: bool,
         sender: Sender<PublishMessage>,
+        // Response channel to send back session_present flag
+        response: tokio::sync::oneshot::Sender<bool>,
     },
     // Client disconnects
     Disconnect {
@@ -81,14 +83,28 @@ impl Broker {
         
         while let Some(message) = self.receiver.recv().await {
             match message {
-                BrokerMessage::Connect { client_id, clean_session, sender } => {
+                BrokerMessage::Connect { client_id, clean_session, sender, response } => {
                     tracing::info!("Broker: Client {} connected (clean_session={})", client_id, clean_session);
+                    
+                    // If clean_session=true, we need to clean up old subscriptions from topic tree
+                    if clean_session {
+                        if let Some(old_session) = self.session_manager.get_session(&client_id) {
+                            // Remove old subscriptions from topic tree
+                            for topic in &old_session.subscriptions {
+                                self.topic_tree.unsubscribe(topic, &client_id);
+                                tracing::debug!("Broker: Removed old subscription {} for client {} due to clean_session", topic, client_id);
+                            }
+                        }
+                    }
                     
                     // Get or create session and determine if session was present
                     let (session_present, session) = self.session_manager
                         .get_or_create_session(client_id.clone(), clean_session);
                     
                     tracing::info!("Broker: Session present for client {}: {}", client_id, session_present);
+                    
+                    // Send response back to client
+                    let _ = response.send(session_present);
                     
                     // Store client sender
                     self.clients.insert(client_id.clone(), sender.clone());
@@ -113,10 +129,6 @@ impl Broker {
                             }
                         }
                     }
-                    
-                    // Note: The ConnAck with session_present flag should be sent by the client handler
-                    // We can't send it directly from here as we don't have a back-channel
-                    // This would need to be refactored to use a request-response pattern
                 }
                 
                 BrokerMessage::Disconnect { client_id } => {

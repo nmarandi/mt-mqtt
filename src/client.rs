@@ -192,18 +192,30 @@ impl Client {
                 
                 tracing::info!("Client connected with ID: {} (clean_session={})", self.id, clean_session);
                 
+                // Create oneshot channel for response
+                let (tx, rx) = tokio::sync::oneshot::channel();
+                
                 // Register with broker
                 let _ = self.broker_sender.send(BrokerMessage::Connect {
                     client_id: self.id.clone(),
                     clean_session,
                     sender: msg_sender.clone(),
+                    response: tx,
                 }).await;
                 
-                // Send CONNACK
-                // Note: For full MQTT 3.1.1 compliance, we should set session_present flag
-                // based on whether a session existed. For now, we send a basic CONNACK.
-                // TODO: Implement proper CONNACK with session_present flag
-                self.write_value(&mut Frame::serialize(Frame::new(ControlPacketType::CONNACK)).unwrap())
+                // Wait for session_present response from broker
+                let session_present = rx.await.unwrap_or(false);
+                
+                tracing::debug!("Client {}: Received session_present={}", self.id, session_present);
+                
+                // Send CONNACK with session_present flag
+                let mut connack = Frame::new(ControlPacketType::CONNACK);
+                if let ControlPacket::ConnAck(ref mut connack_packet) = connack.control_packet {
+                    connack_packet.variable_header.conn_ack_flag.session_present_flag = session_present;
+                    connack_packet.variable_header.reason_code = ConnAckReasonCode::Success;
+                }
+                
+                self.write_value(&mut Frame::serialize(connack).unwrap())
                     .await
                     .unwrap();
                 (true, false)

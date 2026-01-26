@@ -15,9 +15,12 @@ async fn test_broker_routing() {
     });
     
     // Connect client
+    let (conn_tx, _conn_rx) = tokio::sync::oneshot::channel();
     broker_tx.send(BrokerMessage::Connect {
         client_id: "test_client".to_string(),
         sender: client_tx.clone(),
+        clean_session: true,
+        response: conn_tx,
     }).await.unwrap();
     
     // Give broker time to process
@@ -62,9 +65,12 @@ async fn test_wildcard_routing() {
     });
     
     // Connect client
+    let (conn_tx, _conn_rx) = tokio::sync::oneshot::channel();
     broker_tx.send(BrokerMessage::Connect {
         client_id: "wildcard_client".to_string(),
         sender: client_tx.clone(),
+        clean_session: true,
+        response: conn_tx,
     }).await.unwrap();
     
     tokio::time::sleep(Duration::from_millis(10)).await;
@@ -108,14 +114,20 @@ async fn test_multiple_subscribers() {
     });
     
     // Connect two clients
+    let (conn_tx, _conn_rx) = tokio::sync::oneshot::channel();
     broker_tx.send(BrokerMessage::Connect {
         client_id: "client1".to_string(),
         sender: client1_tx,
+        clean_session: true,
+        response: conn_tx,
     }).await.unwrap();
     
+    let (conn_tx, _conn_rx) = tokio::sync::oneshot::channel();
     broker_tx.send(BrokerMessage::Connect {
         client_id: "client2".to_string(),
         sender: client2_tx,
+        clean_session: true,
+        response: conn_tx,
     }).await.unwrap();
     
     tokio::time::sleep(Duration::from_millis(10)).await;
@@ -169,9 +181,12 @@ async fn test_unsubscribe() {
     });
     
     // Connect client
+    let (conn_tx, _conn_rx) = tokio::sync::oneshot::channel();
     broker_tx.send(BrokerMessage::Connect {
         client_id: "test_client".to_string(),
         sender: client_tx.clone(),
+        clean_session: true,
+        response: conn_tx,
     }).await.unwrap();
     
     tokio::time::sleep(Duration::from_millis(10)).await;
@@ -242,9 +257,12 @@ async fn test_retained_messages() {
     tokio::time::sleep(Duration::from_millis(10)).await;
     
     // Now connect and subscribe
+    let (conn_tx, _conn_rx) = tokio::sync::oneshot::channel();
     broker_tx.send(BrokerMessage::Connect {
         client_id: "late_client".to_string(),
         sender: client_tx.clone(),
+        clean_session: true,
+        response: conn_tx,
     }).await.unwrap();
     
     tokio::time::sleep(Duration::from_millis(10)).await;
@@ -297,9 +315,12 @@ async fn test_clear_retained_message() {
     
     // Subscribe after clearing
     let (client_tx, mut client_rx) = mpsc::channel(100);
+    let (conn_tx, _conn_rx) = tokio::sync::oneshot::channel();
     broker_tx.send(BrokerMessage::Connect {
         client_id: "test_client".to_string(),
         sender: client_tx.clone(),
+        clean_session: true,
+        response: conn_tx,
     }).await.unwrap();
     
     tokio::time::sleep(Duration::from_millis(10)).await;
@@ -327,9 +348,12 @@ async fn test_qos1_publish() {
     });
     
     // Connect client
+    let (conn_tx, _conn_rx) = tokio::sync::oneshot::channel();
     broker_tx.send(BrokerMessage::Connect {
         client_id: "test_client".to_string(),
         sender: client_tx.clone(),
+        clean_session: true,
+        response: conn_tx,
     }).await.unwrap();
     
     tokio::time::sleep(Duration::from_millis(10)).await;
@@ -374,9 +398,12 @@ async fn test_qos2_publish() {
     });
     
     // Connect client
+    let (conn_tx, _conn_rx) = tokio::sync::oneshot::channel();
     broker_tx.send(BrokerMessage::Connect {
         client_id: "test_client".to_string(),
         sender: client_tx.clone(),
+        clean_session: true,
+        response: conn_tx,
     }).await.unwrap();
     
     tokio::time::sleep(Duration::from_millis(10)).await;
@@ -406,4 +433,174 @@ async fn test_qos2_publish() {
     assert_eq!(msg.topic, "qos2/test");
     assert_eq!(msg.payload, b"QoS 2 message");
     assert_eq!(msg.qos, 2);
+}
+
+// Test persistent sessions
+#[tokio::test]
+async fn test_persistent_session() {
+    let broker = Broker::new();
+    let broker_tx = broker.get_sender();
+    
+    // Spawn broker task
+    tokio::spawn(async move {
+        broker.run().await;
+    });
+    
+    // Connect client with clean_session=false (persistent)
+    let (client_tx, mut client_rx) = mpsc::channel(100);
+    let (conn_tx, conn_rx) = tokio::sync::oneshot::channel();
+    broker_tx.send(BrokerMessage::Connect {
+        client_id: "persistent_client".to_string(),
+        sender: client_tx.clone(),
+        clean_session: false,
+        response: conn_tx,
+    }).await.unwrap();
+    
+    // First connection should have session_present=false
+    let session_present = timeout(Duration::from_millis(100), conn_rx)
+        .await
+        .expect("Should receive session_present response")
+        .expect("Channel should not be closed");
+    assert!(!session_present, "First connection should not have session present");
+    
+    tokio::time::sleep(Duration::from_millis(10)).await;
+    
+    // Subscribe to topic
+    broker_tx.send(BrokerMessage::Subscribe {
+        client_id: "persistent_client".to_string(),
+        topics: vec!["persistent/test".to_string()],
+    }).await.unwrap();
+    
+    tokio::time::sleep(Duration::from_millis(10)).await;
+    
+    // Disconnect client
+    broker_tx.send(BrokerMessage::Disconnect {
+        client_id: "persistent_client".to_string(),
+    }).await.unwrap();
+    
+    tokio::time::sleep(Duration::from_millis(10)).await;
+    
+    // Publish QoS 1 message while client is offline
+    broker_tx.send(BrokerMessage::Publish(PublishMessage {
+        topic: "persistent/test".to_string(),
+        payload: b"offline message".to_vec(),
+        qos: 1,
+        retain: false,
+    })).await.unwrap();
+    
+    tokio::time::sleep(Duration::from_millis(10)).await;
+    
+    // Reconnect with same client_id and clean_session=false
+    let (client_tx2, mut client_rx2) = mpsc::channel(100);
+    let (conn_tx2, conn_rx2) = tokio::sync::oneshot::channel();
+    broker_tx.send(BrokerMessage::Connect {
+        client_id: "persistent_client".to_string(),
+        sender: client_tx2.clone(),
+        clean_session: false,
+        response: conn_tx2,
+    }).await.unwrap();
+    
+    // Reconnection should have session_present=true
+    let session_present = timeout(Duration::from_millis(100), conn_rx2)
+        .await
+        .expect("Should receive session_present response")
+        .expect("Channel should not be closed");
+    assert!(session_present, "Reconnection should have session present");
+    
+    // Should receive the queued message
+    let msg = timeout(Duration::from_millis(100), client_rx2.recv())
+        .await
+        .expect("Should receive queued message")
+        .expect("Message should not be None");
+    
+    assert_eq!(msg.topic, "persistent/test");
+    assert_eq!(msg.payload, b"offline message");
+    assert_eq!(msg.qos, 1);
+    
+    // Publish new message after reconnect
+    broker_tx.send(BrokerMessage::Publish(PublishMessage {
+        topic: "persistent/test".to_string(),
+        payload: b"online message".to_vec(),
+        qos: 0,
+        retain: false,
+    })).await.unwrap();
+    
+    // Should receive the new message (subscription was restored)
+    let msg = timeout(Duration::from_millis(100), client_rx2.recv())
+        .await
+        .expect("Should receive new message")
+        .expect("Message should not be None");
+    
+    assert_eq!(msg.topic, "persistent/test");
+    assert_eq!(msg.payload, b"online message");
+}
+
+// Test clean session clears persistent session
+#[tokio::test]
+async fn test_clean_session_clears_persistent() {
+    let broker = Broker::new();
+    let broker_tx = broker.get_sender();
+    
+    // Spawn broker task
+    tokio::spawn(async move {
+        broker.run().await;
+    });
+    
+    // Connect with persistent session
+    let (client_tx, _client_rx) = mpsc::channel(100);
+    let (conn_tx, _conn_rx) = tokio::sync::oneshot::channel();
+    broker_tx.send(BrokerMessage::Connect {
+        client_id: "test_clean".to_string(),
+        sender: client_tx.clone(),
+        clean_session: false,
+        response: conn_tx,
+    }).await.unwrap();
+    
+    tokio::time::sleep(Duration::from_millis(10)).await;
+    
+    // Subscribe to topic
+    broker_tx.send(BrokerMessage::Subscribe {
+        client_id: "test_clean".to_string(),
+        topics: vec!["test/topic".to_string()],
+    }).await.unwrap();
+    
+    tokio::time::sleep(Duration::from_millis(10)).await;
+    
+    // Disconnect
+    broker_tx.send(BrokerMessage::Disconnect {
+        client_id: "test_clean".to_string(),
+    }).await.unwrap();
+    
+    tokio::time::sleep(Duration::from_millis(10)).await;
+    
+    // Reconnect with clean_session=true (should clear session)
+    let (client_tx2, mut client_rx2) = mpsc::channel(100);
+    let (conn_tx2, conn_rx2) = tokio::sync::oneshot::channel();
+    broker_tx.send(BrokerMessage::Connect {
+        client_id: "test_clean".to_string(),
+        sender: client_tx2.clone(),
+        clean_session: true,
+        response: conn_tx2,
+    }).await.unwrap();
+    
+    // Should have session_present=false (session was cleared)
+    let session_present = timeout(Duration::from_millis(100), conn_rx2)
+        .await
+        .expect("Should receive session_present response")
+        .expect("Channel should not be closed");
+    assert!(!session_present, "Session should be cleared with clean_session=true");
+    
+    tokio::time::sleep(Duration::from_millis(10)).await;
+    
+    // Publish message - should not receive it because subscription was cleared
+    broker_tx.send(BrokerMessage::Publish(PublishMessage {
+        topic: "test/topic".to_string(),
+        payload: b"test".to_vec(),
+        qos: 0,
+        retain: false,
+    })).await.unwrap();
+    
+    // Should NOT receive message (no subscription after clean session)
+    let result = timeout(Duration::from_millis(100), client_rx2.recv()).await;
+    assert!(result.is_err(), "Should not receive message without subscription");
 }
