@@ -2,8 +2,10 @@ use crate::{
     broker::PublishMessage,
     message_state::MessageStateTracker,
     packet_id::PacketIdManager,
+    persistence::{PersistenceBackend, PersistedMessage, PersistedSession},
 };
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Represents a persistent MQTT session for a client
 #[derive(Debug)]
@@ -63,30 +65,91 @@ impl Session {
     }
 }
 
-/// Manages all client sessions
-#[derive(Debug, Default)]
+/// Manages all client sessions with optional persistence
 pub struct SessionManager {
-    /// Map of client_id to Session
+    /// Map of client_id to Session (in-memory cache)
     sessions: HashMap<String, Session>,
+    /// Persistence backend (optional)
+    persistence: Option<Arc<dyn PersistenceBackend>>,
+}
+
+impl std::fmt::Debug for SessionManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SessionManager")
+            .field("sessions", &self.sessions)
+            .field("has_persistence", &self.persistence.is_some())
+            .finish()
+    }
+}
+
+impl Default for SessionManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SessionManager {
     pub fn new() -> Self {
         Self {
             sessions: HashMap::new(),
+            persistence: None,
+        }
+    }
+
+    /// Create SessionManager with a persistence backend
+    pub fn with_persistence(persistence: Arc<dyn PersistenceBackend>) -> Self {
+        Self {
+            sessions: HashMap::new(),
+            persistence: Some(persistence),
         }
     }
 
     /// Create or retrieve a session
     /// Returns (session_present, mutable reference to session)
-    pub fn get_or_create_session(&mut self, client_id: String, clean_session: bool) -> (bool, &mut Session) {
+    pub async fn get_or_create_session(&mut self, client_id: String, clean_session: bool) -> (bool, &mut Session) {
         let session_present = if clean_session {
             // Clean session requested - remove any existing session
             self.sessions.remove(&client_id);
+            if let Some(backend) = &self.persistence {
+                let _ = backend.delete_session(&client_id).await;
+                let _ = backend.delete_queued_messages(&client_id).await;
+            }
             false
         } else {
             // Persistent session requested - check if session exists
-            self.sessions.contains_key(&client_id)
+            let in_memory = self.sessions.contains_key(&client_id);
+            
+            if !in_memory {
+                // Try to load from persistence
+                if let Some(backend) = &self.persistence {
+                    if let Ok(Some(persisted)) = backend.load_session(&client_id).await {
+                        // Restore session from persistence
+                        let mut session = Session::new(client_id.clone(), true);
+                        session.subscriptions = persisted.subscriptions;
+                        
+                        // Load queued messages
+                        if let Ok(messages) = backend.get_queued_messages(&client_id).await {
+                            for msg in messages {
+                                session.pending_messages.push(PublishMessage {
+                                    topic: msg.topic,
+                                    payload: msg.payload,
+                                    qos: msg.qos,
+                                    retain: msg.retain,
+                                });
+                            }
+                        }
+                        
+                        self.sessions.insert(client_id.clone(), session);
+                        true
+                    } else {
+                        false
+                    }
+                } else {
+                    in_memory
+                }
+            } else {
+                in_memory
+            }
         };
 
         // Get or create session
@@ -110,8 +173,55 @@ impl SessionManager {
     }
 
     /// Remove a session (on clean disconnect or clean_session=true reconnect)
-    pub fn remove_session(&mut self, client_id: &str) {
+    pub async fn remove_session(&mut self, client_id: &str) {
         self.sessions.remove(client_id);
+        if let Some(backend) = &self.persistence {
+            let _ = backend.delete_session(client_id).await;
+            let _ = backend.delete_queued_messages(client_id).await;
+        }
+    }
+
+    /// Save a session to persistence
+    pub async fn persist_session(&self, client_id: &str) -> Result<(), String> {
+        if let Some(backend) = &self.persistence {
+            if let Some(session) = self.sessions.get(client_id) {
+                if session.persistent {
+                    let persisted = PersistedSession {
+                        client_id: session.client_id.clone(),
+                        persistent: session.persistent,
+                        subscriptions: session.subscriptions.clone(),
+                    };
+                    backend.save_session(&persisted).await
+                        .map_err(|e| e.to_string())?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Save a queued message to persistence
+    pub async fn persist_queued_message(&self, client_id: &str, message: &PublishMessage) -> Result<(), String> {
+        if let Some(backend) = &self.persistence {
+            let persisted = PersistedMessage {
+                client_id: client_id.to_string(),
+                topic: message.topic.clone(),
+                payload: message.payload.clone(),
+                qos: message.qos,
+                retain: message.retain,
+            };
+            backend.queue_message(&persisted).await
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+
+    /// Clear queued messages from persistence after delivery
+    pub async fn clear_persisted_messages(&self, client_id: &str) -> Result<(), String> {
+        if let Some(backend) = &self.persistence {
+            backend.delete_queued_messages(client_id).await
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(())
     }
 
     /// Check if a session exists
@@ -184,45 +294,45 @@ mod tests {
         assert_eq!(session.pending_messages.len(), 2);
     }
 
-    #[test]
-    fn test_session_manager_clean_session() {
+    #[tokio::test]
+    async fn test_session_manager_clean_session() {
         let mut manager = SessionManager::new();
         
         // First connection with clean_session=true
-        let (session_present, _session) = manager.get_or_create_session("client1".to_string(), true);
+        let (session_present, _session) = manager.get_or_create_session("client1".to_string(), true).await;
         assert!(!session_present);
         
         // Reconnect with clean_session=true should not have session present
-        let (session_present, _session) = manager.get_or_create_session("client1".to_string(), true);
+        let (session_present, _session) = manager.get_or_create_session("client1".to_string(), true).await;
         assert!(!session_present);
     }
 
-    #[test]
-    fn test_session_manager_persistent_session() {
+    #[tokio::test]
+    async fn test_session_manager_persistent_session() {
         let mut manager = SessionManager::new();
         
         // First connection with clean_session=false
-        let (session_present, session) = manager.get_or_create_session("client1".to_string(), false);
+        let (session_present, session) = manager.get_or_create_session("client1".to_string(), false).await;
         assert!(!session_present); // First time, no session exists
         session.add_subscription("topic/1".to_string());
         
         // Reconnect with clean_session=false should restore session
-        let (session_present, session) = manager.get_or_create_session("client1".to_string(), false);
+        let (session_present, session) = manager.get_or_create_session("client1".to_string(), false).await;
         assert!(session_present); // Session should be present
         assert_eq!(session.subscriptions.len(), 1);
         assert!(session.subscriptions.contains("topic/1"));
     }
 
-    #[test]
-    fn test_session_manager_clean_clears_persistent() {
+    #[tokio::test]
+    async fn test_session_manager_clean_clears_persistent() {
         let mut manager = SessionManager::new();
         
         // Create persistent session
-        let (_session_present, session) = manager.get_or_create_session("client1".to_string(), false);
+        let (_session_present, session) = manager.get_or_create_session("client1".to_string(), false).await;
         session.add_subscription("topic/1".to_string());
         
         // Reconnect with clean_session=true should clear session
-        let (session_present, session) = manager.get_or_create_session("client1".to_string(), true);
+        let (session_present, session) = manager.get_or_create_session("client1".to_string(), true).await;
         assert!(!session_present);
         assert!(session.subscriptions.is_empty());
     }

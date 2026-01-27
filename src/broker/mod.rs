@@ -92,7 +92,7 @@ impl Broker {
                     
                     // Get or create session and determine if session was present
                     let (session_present, session) = self.session_manager
-                        .get_or_create_session(client_id.clone(), clean_session);
+                        .get_or_create_session(client_id.clone(), clean_session).await;
                     
                     tracing::info!("Broker: Session present for client {}: {}", client_id, session_present);
                     
@@ -115,6 +115,10 @@ impl Broker {
                         if !pending_messages.is_empty() {
                             tracing::info!("Broker: Delivering {} pending messages to client {}", 
                                 pending_messages.len(), client_id);
+                            
+                            // Clear persisted messages after loading
+                            let _ = self.session_manager.clear_persisted_messages(&client_id).await;
+                            
                             for msg in pending_messages {
                                 if let Some(client_sender) = self.clients.get(&client_id) {
                                     let _ = client_sender.send(msg).await;
@@ -137,9 +141,11 @@ impl Broker {
                             for topic in &session.subscriptions {
                                 self.topic_tree.unsubscribe(topic, &client_id);
                             }
-                            self.session_manager.remove_session(&client_id);
+                            self.session_manager.remove_session(&client_id).await;
                             tracing::debug!("Broker: Cleaned up non-persistent session for client {}", client_id);
                         } else {
+                            // Persist session state for persistent sessions
+                            let _ = self.session_manager.persist_session(&client_id).await;
                             tracing::debug!("Broker: Keeping persistent session for client {}", client_id);
                         }
                     }
@@ -156,6 +162,9 @@ impl Broker {
                         if let Some(session) = self.session_manager.get_session_mut(&client_id) {
                             session.add_subscription(topic.clone());
                         }
+                        
+                        // Persist the session with new subscription
+                        let _ = self.session_manager.persist_session(&client_id).await;
                         
                         // Send retained message if exists
                         if let Some(retained_msg) = self.retained_messages.get(topic) {
@@ -213,9 +222,13 @@ impl Broker {
                             });
                         } else if let Some(session) = self.session_manager.get_session_mut(&subscriber_id) {
                             // Client is offline but has persistent session
-                            if session.persistent {
-                                // Queue message for offline delivery (filtering is done in queue_message)
+                            if session.persistent && msg.qos > 0 {
+                                // Queue message for offline delivery
                                 session.queue_message(msg.clone());
+                                
+                                // Persist the queued message
+                                let _ = self.session_manager.persist_queued_message(&subscriber_id, &msg).await;
+                                
                                 tracing::debug!("Broker: Queued message for offline client {} (QoS {})", 
                                     subscriber_id, msg.qos);
                             }

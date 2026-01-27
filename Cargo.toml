@@ -15,6 +15,15 @@ strum = "0.25.0"
 strum_macros = "0.25.3"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+async-trait = "0.1"
+thiserror = "1.0"
+sqlx = { version = "0.7", features = ["runtime-tokio", "sqlite"], optional = true }
+
+[features]
+default = []
+sqlite = ["dep:sqlx"]
 
 [dev-dependencies]
 tokio-test = "0.4"

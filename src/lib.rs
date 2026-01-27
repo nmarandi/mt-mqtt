@@ -2,6 +2,7 @@ pub mod broker;
 mod client;
 mod message_state;
 mod packet_id;
+pub mod persistence;
 pub mod protocol;
 mod server;
 mod session;

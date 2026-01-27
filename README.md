@@ -35,12 +35,12 @@ A high-performance, async MQTT broker implementation in Rust built with Tokio. D
 - **Keep-Alive** - PINGREQ/PINGRESP heartbeat
 - **Clean Disconnect** - Graceful connection termination
 - **Persistent Sessions** - Session state preservation across reconnects
+- **Disk Persistence** - Optional SQLite backend for sessions and messages (feature flag)
 
 ### 🚧 Planned Features
 - **Will Messages** - Last will and testament on abnormal disconnect
 - **Authentication** - Username/password with ACL support
 - **TLS/SSL** - Secure connections on port 8883
-- **Message Persistence** - SQLite-backed storage
 - **MQTT 5.0** - Support for latest protocol version
 - **WebSocket** - Browser client support
 - **Monitoring** - Metrics and observability
@@ -150,6 +150,32 @@ mosquitto_sub -h localhost -p 1883 -t "sensor/data" -i "my_client" -c -q 1
 # Output: offline_message_1, offline_message_2
 
 # Note: QoS 0 messages are NOT queued for offline clients
+```
+
+### Persistence (Optional SQLite Backend)
+```bash
+# Build with SQLite persistence support
+cargo build --features sqlite
+
+# Sessions and messages will survive broker restarts
+# Default: in-memory only (no disk persistence)
+```
+
+**Persistence Architecture:**
+- **Trait-based design**: Easy to swap SQLite for other backends (RocksDB, etc.)
+- **What's persisted**: Sessions, subscriptions, queued messages (QoS 1/2), retained messages
+- **Async operations**: Non-blocking writes to avoid impacting broker performance
+- **ACID guarantees**: SQLite transactions ensure data integrity
+
+**Usage:**
+```rust
+use mt_mqtt::persistence::sqlite::SqliteBackend;
+use std::sync::Arc;
+
+let mut backend = SqliteBackend::new("mqtt.db");
+backend.init().await?;
+let persistence = Arc::new(backend);
+let session_manager = SessionManager::with_persistence(persistence);
 ```
 
 ## 🏗️ Architecture
@@ -315,10 +341,10 @@ Performance benchmarks for:
 - ✅ QoS 2 four-way handshake (PUBREC, PUBREL, PUBCOMP)
 - ✅ Message state tracking
 - ✅ Persistent Sessions - Session state preservation across reconnects
+- ✅ Disk Persistence - Optional SQLite backend (feature flag)
 
 ### 🔨 Planned for Implementation
 - [ ] **Will Messages** - Last will and testament on abnormal disconnect
-- [ ] **Message Persistence** - SQLite backend for durability
 - [ ] **Authentication & Authorization** - Username/password with ACL
 - [ ] **TLS/SSL** - Secure connections on port 8883
 - [ ] **WebSocket Support** - Browser client compatibility
@@ -372,7 +398,7 @@ Early benchmarks on a typical development machine:
 ## 🐛 Known Limitations
 
 Current version limitations:
-- **No disk persistence** - Sessions and messages lost on broker restart (in-memory only)
+- **Disk persistence optional** - Sessions and messages lost on broker restart unless compiled with `--features sqlite`
 - **No authentication** - Open connections (not suitable for production)
 - **No will messages** - Last will and testament not yet implemented
 
