@@ -49,8 +49,7 @@ impl SqliteBackend {
                 payload BLOB NOT NULL,
                 qos INTEGER NOT NULL,
                 retain INTEGER NOT NULL,
-                created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-                FOREIGN KEY (client_id) REFERENCES sessions(client_id) ON DELETE CASCADE
+                created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
             )
             "#,
         )
@@ -278,7 +277,7 @@ impl PersistenceBackend for SqliteBackend {
                 topic,
                 payload,
                 qos: qos as u8,
-                retain: true,
+                retain: false,  // Don't force retain flag on load - let broker decide
             })),
             None => Ok(None),
         }
@@ -317,7 +316,7 @@ impl PersistenceBackend for SqliteBackend {
                     topic: topic.clone(),
                     payload,
                     qos: qos as u8,
-                    retain: true,
+                    retain: false,  // Don't force retain flag - it's stored separately
                 };
                 (topic, message)
             })

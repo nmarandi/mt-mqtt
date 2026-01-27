@@ -119,7 +119,7 @@ impl SessionManager {
             // Persistent session requested - check if session exists
             let in_memory = self.sessions.contains_key(&client_id);
             
-            if !in_memory {
+            if !in_memory && self.persistence.is_some() {
                 // Try to load from persistence
                 if let Some(backend) = &self.persistence {
                     if let Ok(Some(persisted)) = backend.load_session(&client_id).await {
@@ -145,7 +145,7 @@ impl SessionManager {
                         false
                     }
                 } else {
-                    in_memory
+                    false
                 }
             } else {
                 in_memory

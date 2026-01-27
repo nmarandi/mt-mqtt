@@ -144,9 +144,17 @@ impl Broker {
                             self.session_manager.remove_session(&client_id).await;
                             tracing::debug!("Broker: Cleaned up non-persistent session for client {}", client_id);
                         } else {
-                            // Persist session state for persistent sessions
+                            // Persist session state and queued messages for persistent sessions
                             let _ = self.session_manager.persist_session(&client_id).await;
-                            tracing::debug!("Broker: Keeping persistent session for client {}", client_id);
+                            
+                            // Persist queued messages
+                            if let Some(session) = self.session_manager.get_session(&client_id) {
+                                for msg in &session.pending_messages {
+                                    let _ = self.session_manager.persist_queued_message(&client_id, msg).await;
+                                }
+                            }
+                            
+                            tracing::debug!("Broker: Persisted session and messages for client {}", client_id);
                         }
                     }
                 }
@@ -226,11 +234,11 @@ impl Broker {
                                 // Queue message for offline delivery
                                 session.queue_message(msg.clone());
                                 
-                                // Persist the queued message
-                                let _ = self.session_manager.persist_queued_message(&subscriber_id, &msg).await;
-                                
                                 tracing::debug!("Broker: Queued message for offline client {} (QoS {})", 
                                     subscriber_id, msg.qos);
+                                
+                                // Note: Persistence happens on disconnect to avoid borrowing issues
+                                // Messages are queued in-memory and persisted when client disconnects
                             }
                         }
                     }
