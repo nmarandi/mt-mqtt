@@ -18,9 +18,11 @@ pub struct Session {
     pub subscriptions: std::collections::HashSet<String>,
     /// Queue of pending messages for offline client (QoS 1 and 2 only)
     pub pending_messages: Vec<PublishMessage>,
-    /// Packet ID manager for this session
+    /// Packet ID manager for this session (reserved for future QoS flow management)
+    #[allow(dead_code)]
     pub packet_id_manager: PacketIdManager,
-    /// Message state tracker for QoS flows
+    /// Message state tracker for QoS flows (reserved for future QoS flow management)
+    #[allow(dead_code)]
     pub message_state_tracker: MessageStateTracker,
 }
 
@@ -52,11 +54,6 @@ impl Session {
         if message.qos > 0 {
             self.pending_messages.push(message);
         }
-    }
-
-    /// Clear all pending messages
-    pub fn clear_pending_messages(&mut self) {
-        self.pending_messages.clear();
     }
 
     /// Get and clear all pending messages (for delivery on reconnect)
@@ -97,6 +94,7 @@ impl SessionManager {
     }
 
     /// Create SessionManager with a persistence backend
+    #[allow(dead_code)]
     pub fn with_persistence(persistence: Arc<dyn PersistenceBackend>) -> Self {
         Self {
             sessions: HashMap::new(),
@@ -225,6 +223,7 @@ impl SessionManager {
     }
 
     /// Check if a session exists
+    #[allow(dead_code)]
     pub fn has_session(&self, client_id: &str) -> bool {
         self.sessions.contains_key(client_id)
     }

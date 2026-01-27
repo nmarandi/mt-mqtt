@@ -143,6 +143,7 @@ fn bench_sqlite_backend(c: &mut Criterion) {
 }
 
 #[cfg(not(feature = "sqlite"))]
+#[allow(dead_code)]
 fn bench_sqlite_backend(_c: &mut Criterion) {
     // SQLite benchmarks skipped - compile with --features sqlite to enable
 }
