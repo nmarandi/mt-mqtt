@@ -28,6 +28,7 @@ sqlite = ["dep:sqlx"]
 [dev-dependencies]
 tokio-test = "0.4"
 criterion = "0.5"
+rand = "0.8"
 
 [[test]]
 name = "integration_tests"
@@ -35,4 +36,8 @@ path = "tests/integration_tests.rs"
 
 [[bench]]
 name = "broker_bench"
+harness = false
+
+[[bench]]
+name = "persistence_bench"
 harness = false
