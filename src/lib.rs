@@ -1,3 +1,4 @@
+pub mod auth;
 pub mod broker;
 mod client;
 mod message_state;
