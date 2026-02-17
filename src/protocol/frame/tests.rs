@@ -71,14 +71,13 @@ mod tests {
 
     #[test]
     fn test_deserialize_publish_qos0() {
-        // PUBLISH packet QoS 0 with MQTT 5.0 format (includes properties length = 0)
-        // Note: The decoder expects MQTT 5.0 format with properties field
+        // PUBLISH packet QoS 0 with MQTT 3.1.1 format (no properties field)
+        // Note: The decoder handles MQTT 3.1.1 without properties field
         let packet = vec![
             0x30, // PUBLISH packet type, QoS 0
-            0x0D, // Remaining length = 13
+            0x0E, // Remaining length = 14 (2 + 10 + 2)
             0x00, 0x0A, // Topic length = 10
             b't', b'e', b's', b't', b'/', b't', b'o', b'p', b'i', b'c', // Topic "test/topic"
-            0x00, // Properties length = 0 (no properties)
             b'h', b'i', // Payload "hi"
         ];
 
@@ -100,12 +99,11 @@ mod tests {
 
     #[test]
     fn test_deserialize_subscribe() {
-        // SUBSCRIBE packet
+        // SUBSCRIBE packet for MQTT 3.1.1 (no properties field)
         let packet = vec![
             0x82, // SUBSCRIBE packet type
-            0x0E, // Remaining length
+            0x0F, // Remaining length = 15 (2 + 2 + 10 + 1)
             0x00, 0x01, // Packet ID = 1
-            0x00, // Properties length
             0x00, 0x0A, b't', b'e', b's', b't', b'/', b't', b'o', b'p', b'i', b'c', // Topic "test/topic"
             0x00, // QoS 0
         ];
@@ -113,7 +111,7 @@ mod tests {
         let mut cursor = Cursor::new(&packet[..]);
         let result = Frame::deserialize(&mut cursor);
         
-        assert!(result.is_ok(), "Failed to deserialize SUBSCRIBE packet");
+        assert!(result.is_ok(), "Failed to deserialize SUBSCRIBE packet: {:?}", result.err());
         
         let frame = result.unwrap();
         assert_eq!(frame.fix_header.control_packet_type, ControlPacketType::SUBSCRIBE);
