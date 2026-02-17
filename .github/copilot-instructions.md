@@ -113,9 +113,11 @@ cargo clippy -- -D warnings
 
 **rustfmt.toml settings:**
 - `max_width = 150` - Line length limit
-- `merge_imports = true` - Consolidate imports
-- `reorder_impl_items = true` - Sort impl block items
-- `empty_item_single_line = false` - Empty items on multiple lines
+- `merge_imports = true` - Consolidate imports (unstable, requires nightly)
+- `reorder_impl_items = true` - Sort impl block items (unstable, requires nightly)
+- `empty_item_single_line = false` - Empty items on multiple lines (unstable, requires nightly)
+
+**Note:** Some rustfmt settings are unstable and only work with nightly Rust. On stable, cargo fmt will use default settings and may show warnings.
 
 ### Benchmarking
 ```bash
