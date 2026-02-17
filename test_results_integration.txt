@@ -1,0 +1,28 @@
+warning: variable does not need to be mutable
+   --> tests/integration_tests.rs:450:21
+    |
+450 |     let (client_tx, mut client_rx) = mpsc::channel(100);
+    |                     ----^^^^^^^^^
+    |                     |
+    |                     help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `client_rx`
+   --> tests/integration_tests.rs:450:21
+    |
+450 |     let (client_tx, mut client_rx) = mpsc::channel(100);
+    |                     ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_client_rx`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `mt-mqtt` (test "integration_tests") generated 2 warnings (run `cargo fix --test "integration_tests" -p mt-mqtt` to apply 2 suggestions)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.07s
+     Running tests/integration_tests.rs (target/debug/deps/integration_tests-1e3744ec9b35c73d)
+
+running 2 tests
+test test_persistent_session ... ok
+test test_clean_session_clears_persistent ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.15s
+

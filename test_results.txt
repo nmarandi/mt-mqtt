@@ -1,0 +1,5 @@
+error: unexpected argument 'persistent' found
+
+Usage: cargo test [OPTIONS] [TESTNAME] [-- [ARGS]...]
+
+For more information, try '--help'.
