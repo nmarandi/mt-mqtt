@@ -781,7 +781,7 @@ async fn test_will_message_on_abnormal_disconnect() {
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // Connect client with will message
-    let (client_tx, mut _client_rx) = mpsc::channel(100);
+    let (client_tx, _client_rx) = mpsc::channel(100);
     let (conn_tx, _conn_rx) = tokio::sync::oneshot::channel();
     broker_tx
         .send(BrokerMessage::Connect {
@@ -863,7 +863,7 @@ async fn test_will_message_not_sent_on_graceful_disconnect() {
     tokio::time::sleep(Duration::from_millis(10)).await;
 
     // Connect client with will message
-    let (client_tx, mut _client_rx) = mpsc::channel(100);
+    let (client_tx, _client_rx) = mpsc::channel(100);
     let (conn_tx, _conn_rx) = tokio::sync::oneshot::channel();
     broker_tx
         .send(BrokerMessage::Connect {
@@ -913,7 +913,7 @@ async fn test_will_message_with_retain() {
     });
 
     // Connect client with retained will message
-    let (client_tx, mut _client_rx) = mpsc::channel(100);
+    let (client_tx, _client_rx) = mpsc::channel(100);
     let (conn_tx, _conn_rx) = tokio::sync::oneshot::channel();
     broker_tx
         .send(BrokerMessage::Connect {

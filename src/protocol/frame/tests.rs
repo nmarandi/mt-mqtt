@@ -75,7 +75,7 @@ mod tests {
         // Note: The decoder handles MQTT 3.1.1 without properties field
         let packet = vec![
             0x30, // PUBLISH packet type, QoS 0
-            0x0E, // Remaining length = 14 (2 + 10 + 2)
+            0x0E, // Remaining length = 14 (2 bytes topic len + 10 bytes topic + 2 bytes payload)
             0x00, 0x0A, // Topic length = 10
             b't', b'e', b's', b't', b'/', b't', b'o', b'p', b'i', b'c', // Topic "test/topic"
             b'h', b'i', // Payload "hi"
