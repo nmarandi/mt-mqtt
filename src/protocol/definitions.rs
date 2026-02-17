@@ -307,9 +307,7 @@ pub fn have_packet_identifier(fix_header: FixHeader) -> bool {
         | ControlPacketType::SUBACK
         | ControlPacketType::UNSUBSCRIBE
         | ControlPacketType::UNSUBACK => true,
-        ControlPacketType::PUBLISH => {
-            fix_header.flags.1 > 0 
-        }
+        ControlPacketType::PUBLISH => fix_header.flags.1 > 0,
     }
 }
 #[derive(Debug)]

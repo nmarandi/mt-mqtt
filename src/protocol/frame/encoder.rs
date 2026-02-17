@@ -13,16 +13,16 @@ pub fn encode_conn_ack_packet(src: ConnAckControlPacket, bytes: &mut BytesMut) {
 pub fn encode_publish_packet(src: PublishControlPacket, bytes: &mut BytesMut) {
     // Encode topic name
     encode_string(&src.variable_header.topic_name, bytes);
-    
+
     // Encode packet identifier if QoS > 0
     if let Some(packet_id) = src.variable_header.packet_identifier {
         bytes.put_u16(packet_id);
     }
-    
+
     // For MQTT 3.1.1, don't encode properties (they don't exist)
     // Properties are only in MQTT 5.0
     // encode_properties(src.variable_header.get_properties(), bytes);
-    
+
     // Encode payload
     bytes.put_slice(&src.payload.data);
 }

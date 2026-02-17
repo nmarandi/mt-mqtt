@@ -19,12 +19,12 @@ mod tests {
 
         let mut cursor = Cursor::new(&packet[..]);
         let result = Frame::deserialize(&mut cursor);
-        
+
         assert!(result.is_ok(), "Failed to deserialize CONNECT packet");
-        
+
         let frame = result.unwrap();
         assert_eq!(frame.fix_header.control_packet_type, ControlPacketType::CONNECT);
-        
+
         if let ControlPacket::Connect(connect) = frame.control_packet {
             assert_eq!(connect.payload.client_identifier, "test");
             assert_eq!(connect.variable_header.protocol_version, 4);
@@ -41,9 +41,9 @@ mod tests {
 
         let mut cursor = Cursor::new(&packet[..]);
         let result = Frame::deserialize(&mut cursor);
-        
+
         assert!(result.is_err(), "Should fail on incomplete packet");
-        
+
         if let Err(Error::Incomplete(_)) = result {
             // Expected
         } else {
@@ -54,17 +54,17 @@ mod tests {
     #[test]
     fn test_serialize_connack() {
         let mut frame = Frame::new(ControlPacketType::CONNACK);
-        
+
         if let ControlPacket::ConnAck(ref mut connack) = frame.control_packet {
             connack.variable_header.reason_code = ConnAckReasonCode::Success;
         }
 
         let result = Frame::serialize(frame);
         assert!(result.is_ok(), "Failed to serialize CONNACK");
-        
+
         let bytes = result.unwrap();
         assert!(bytes.len() > 0, "Serialized packet should not be empty");
-        
+
         // First byte should be CONNACK packet type
         assert_eq!(bytes[0] & 0xF0, 0x20);
     }
@@ -83,12 +83,12 @@ mod tests {
 
         let mut cursor = Cursor::new(&packet[..]);
         let result = Frame::deserialize(&mut cursor);
-        
+
         assert!(result.is_ok(), "Failed to deserialize PUBLISH packet: {:?}", result);
-        
+
         let frame = result.unwrap();
         assert_eq!(frame.fix_header.control_packet_type, ControlPacketType::PUBLISH);
-        
+
         if let ControlPacket::Publish(publish) = frame.control_packet {
             assert_eq!(publish.variable_header.topic_name, "test/topic");
             assert_eq!(&publish.payload.data[..], b"hi");
@@ -110,9 +110,9 @@ mod tests {
 
         let mut cursor = Cursor::new(&packet[..]);
         let result = Frame::deserialize(&mut cursor);
-        
+
         assert!(result.is_ok(), "Failed to deserialize SUBSCRIBE packet: {:?}", result.err());
-        
+
         let frame = result.unwrap();
         assert_eq!(frame.fix_header.control_packet_type, ControlPacketType::SUBSCRIBE);
     }
@@ -147,16 +147,16 @@ mod tests {
     #[test]
     fn test_string_encoding_decoding() {
         let test_str = "test/topic";
-        
+
         // Encode
         let mut bytes = BytesMut::new();
         bytes.extend_from_slice(&(test_str.len() as u16).to_be_bytes());
         bytes.extend_from_slice(test_str.as_bytes());
-        
+
         // Decode
         let mut cursor = Cursor::new(&bytes[..]);
         let result = super::super::decoder::decode_string(&mut cursor);
-        
+
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), test_str);
     }
@@ -165,10 +165,10 @@ mod tests {
     fn test_decode_string_incomplete() {
         // String length says 10 bytes, but only 5 bytes available
         let bytes = vec![0x00, 0x0A, b't', b'e', b's', b't', b'!'];
-        
+
         let mut cursor = Cursor::new(&bytes[..]);
         let result = super::super::decoder::decode_string(&mut cursor);
-        
+
         assert!(result.is_err());
         if let Err(Error::Incomplete(_)) = result {
             // Expected
