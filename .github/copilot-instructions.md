@@ -115,7 +115,7 @@ cargo clippy -- -D warnings
 - `max_width = 150` - Line length limit
 - `merge_imports = true` - Consolidate imports (unstable, requires nightly)
 - `reorder_impl_items = true` - Sort impl block items (unstable, requires nightly)
-- `empty_item_single_line = false` - Empty items on multiple lines (unstable, requires nightly)
+- `empty_item_single_line = false` - Keep empty items on multiple lines (unstable, requires nightly)
 
 **Note:** Some rustfmt settings are unstable and only work with nightly Rust. On stable, cargo fmt will use default settings and may show warnings.
 
@@ -384,10 +384,10 @@ let publish = Publish {
 ### Topic Matching with Wildcards
 ```rust
 // Single-level wildcard
-"sensor/+/temperature" matches "sensor/living-room/temperature"
+"sensor/+/temperature" matches "sensor/living_room/temperature"
 
 // Multi-level wildcard
-"sensor/#" matches "sensor/living-room/temperature" and "sensor/bedroom/humidity"
+"sensor/#" matches "sensor/living_room/temperature" and "sensor/bedroom/humidity"
 ```
 
 ## Resources
