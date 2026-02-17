@@ -180,43 +180,37 @@ mod tests {
     fn test_valid_credentials() {
         let mut auth = Authenticator::new(false);
         auth.add_user("user1".to_string(), "pass1".to_string());
-        
-        assert_eq!(
-            auth.authenticate(Some("user1"), Some(b"pass1")),
-            AuthResult::Success
-        );
+
+        assert_eq!(auth.authenticate(Some("user1"), Some(b"pass1")), AuthResult::Success);
     }
 
     #[test]
     fn test_invalid_password() {
         let mut auth = Authenticator::new(false);
         auth.add_user("user1".to_string(), "pass1".to_string());
-        
-        assert_eq!(
-            auth.authenticate(Some("user1"), Some(b"wrong")),
-            AuthResult::InvalidCredentials
-        );
+
+        assert_eq!(auth.authenticate(Some("user1"), Some(b"wrong")), AuthResult::InvalidCredentials);
     }
 
     #[test]
     fn test_invalid_username() {
         let mut auth = Authenticator::new(false);
         auth.add_user("user1".to_string(), "pass1".to_string());
-        
-        assert_eq!(
-            auth.authenticate(Some("wrong"), Some(b"pass1")),
-            AuthResult::InvalidCredentials
-        );
+
+        assert_eq!(auth.authenticate(Some("wrong"), Some(b"pass1")), AuthResult::InvalidCredentials);
     }
 
     #[test]
     fn test_acl_publish_exact() {
         let mut auth = Authenticator::new(false);
         auth.add_user("user1".to_string(), "pass1".to_string());
-        auth.set_permissions("user1".to_string(), TopicPermissions {
-            publish: vec!["home/temp".to_string()],
-            subscribe: vec![],
-        });
+        auth.set_permissions(
+            "user1".to_string(),
+            TopicPermissions {
+                publish: vec!["home/temp".to_string()],
+                subscribe: vec![],
+            },
+        );
 
         assert!(auth.can_publish(Some("user1"), "home/temp"));
         assert!(!auth.can_publish(Some("user1"), "home/humidity"));
@@ -226,10 +220,13 @@ mod tests {
     fn test_acl_publish_wildcard_single() {
         let mut auth = Authenticator::new(false);
         auth.add_user("user1".to_string(), "pass1".to_string());
-        auth.set_permissions("user1".to_string(), TopicPermissions {
-            publish: vec!["home/+/temp".to_string()],
-            subscribe: vec![],
-        });
+        auth.set_permissions(
+            "user1".to_string(),
+            TopicPermissions {
+                publish: vec!["home/+/temp".to_string()],
+                subscribe: vec![],
+            },
+        );
 
         assert!(auth.can_publish(Some("user1"), "home/room1/temp"));
         assert!(auth.can_publish(Some("user1"), "home/room2/temp"));
@@ -240,10 +237,13 @@ mod tests {
     fn test_acl_publish_wildcard_multi() {
         let mut auth = Authenticator::new(false);
         auth.add_user("user1".to_string(), "pass1".to_string());
-        auth.set_permissions("user1".to_string(), TopicPermissions {
-            publish: vec!["home/#".to_string()],
-            subscribe: vec![],
-        });
+        auth.set_permissions(
+            "user1".to_string(),
+            TopicPermissions {
+                publish: vec!["home/#".to_string()],
+                subscribe: vec![],
+            },
+        );
 
         assert!(auth.can_publish(Some("user1"), "home/temp"));
         assert!(auth.can_publish(Some("user1"), "home/room1/temp"));
@@ -255,10 +255,13 @@ mod tests {
     fn test_acl_subscribe() {
         let mut auth = Authenticator::new(false);
         auth.add_user("user1".to_string(), "pass1".to_string());
-        auth.set_permissions("user1".to_string(), TopicPermissions {
-            publish: vec![],
-            subscribe: vec!["sensors/#".to_string()],
-        });
+        auth.set_permissions(
+            "user1".to_string(),
+            TopicPermissions {
+                publish: vec![],
+                subscribe: vec!["sensors/#".to_string()],
+            },
+        );
 
         assert!(auth.can_subscribe(Some("user1"), "sensors/temp"));
         assert!(auth.can_subscribe(Some("user1"), "sensors/room/temp"));
