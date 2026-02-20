@@ -37,7 +37,7 @@ A high-performance, async MQTT broker implementation in Rust built with Tokio. D
 - **Persistent Sessions** - Session state preservation across reconnects
 - **Disk Persistence** - Optional SQLite backend for sessions and messages (feature flag)
 - **Will Messages** - Last will and testament on abnormal disconnect
-- **Authentication** - Username/password validation with topic-based ACL
+- **Authentication** - Secure password hashing (bcrypt) with topic-based ACL
 
 ### 🚧 Planned Features
 - **TLS/SSL** - Secure connections on port 8883
@@ -176,7 +176,7 @@ mosquitto_sub -h localhost -p 1883 -t "status/#" -v
 
 ### Authentication & Authorization
 
-**Authentication Module** provides username/password validation with topic-based ACL (Access Control List):
+**Authentication Module** provides secure username/password validation with bcrypt hashing and topic-based ACL (Access Control List):
 
 ```rust
 use mt_mqtt::auth::{Authenticator, TopicPermissions};
@@ -184,7 +184,7 @@ use mt_mqtt::auth::{Authenticator, TopicPermissions};
 // Create authenticator (no anonymous connections)
 let mut auth = Authenticator::new(false);
 
-// Add users with passwords
+// Add users with passwords (automatically hashed with bcrypt)
 auth.add_user("sensor_device".to_string(), "secret123".to_string());
 auth.add_user("admin".to_string(), "admin_pass".to_string());
 

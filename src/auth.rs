@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-/// Authentication module for username/password validation
+/// Authentication module for username/password validation with secure password hashing
 #[derive(Debug, Clone)]
 pub struct Authenticator {
-    // Simple username -> password map
+    // Username -> bcrypt password hash
     credentials: HashMap<String, String>,
     // ACL: username -> allowed topics (pub/sub patterns)
     acl: HashMap<String, TopicPermissions>,
@@ -33,9 +33,17 @@ impl Authenticator {
         }
     }
 
-    /// Add a user with username and password
+    /// Add a user with username and password (password will be hashed using bcrypt)
     pub fn add_user(&mut self, username: String, password: String) {
-        self.credentials.insert(username, password);
+        // Hash the password with bcrypt (cost factor 12 is a good balance of security and performance)
+        let hash = bcrypt::hash(password, 12).expect("Failed to hash password");
+        self.credentials.insert(username, hash);
+    }
+
+    /// Add a user with a pre-hashed password (useful for loading from database)
+    /// The hash should be a valid bcrypt hash string
+    pub fn add_user_with_hash(&mut self, username: String, password_hash: String) {
+        self.credentials.insert(username, password_hash);
     }
 
     /// Set topic permissions for a user
@@ -43,7 +51,7 @@ impl Authenticator {
         self.acl.insert(username, permissions);
     }
 
-    /// Authenticate a connection
+    /// Authenticate a connection using bcrypt password verification
     pub fn authenticate(&self, username: Option<&str>, password: Option<&[u8]>) -> AuthResult {
         match (username, password) {
             (None, None) => {
@@ -55,13 +63,13 @@ impl Authenticator {
                 }
             }
             (Some(user), Some(pass)) => {
-                // Check if user exists and password matches
-                if let Some(stored_pass) = self.credentials.get(user) {
+                // Check if user exists and password matches using bcrypt
+                if let Some(stored_hash) = self.credentials.get(user) {
                     let pass_str = String::from_utf8_lossy(pass);
-                    if stored_pass == &pass_str {
-                        AuthResult::Success
-                    } else {
-                        AuthResult::InvalidCredentials
+                    // Use bcrypt's constant-time verification to prevent timing attacks
+                    match bcrypt::verify(pass_str.as_ref(), stored_hash) {
+                        Ok(true) => AuthResult::Success,
+                        _ => AuthResult::InvalidCredentials,
                     }
                 } else {
                     AuthResult::InvalidCredentials

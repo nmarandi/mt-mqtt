@@ -12,13 +12,13 @@ MT-MQTT includes a flexible authentication and authorization module that provide
 
 The authentication module (`src/auth.rs`) is standalone and can be integrated with the broker or used independently.
 
-> **⚠️ Security Warning**: The current implementation stores passwords in cleartext in memory. This is a security risk in production environments. Future versions will implement password hashing (e.g., Argon2, bcrypt) to protect credentials. For production use, passwords should be hashed before storage and validated using constant-time comparison.
+Passwords are securely hashed using **bcrypt** with a cost factor of 12, providing strong protection against brute-force attacks. The implementation uses constant-time comparison to prevent timing attacks.
 
 ### Components
 
 ```rust
 pub struct Authenticator {
-    credentials: HashMap<String, String>,       // username -> password (CLEARTEXT - not production-ready)
+    credentials: HashMap<String, String>,       // username -> bcrypt password hash
     acl: HashMap<String, TopicPermissions>,     // username -> permissions
     allow_anonymous: bool,                       // allow connections without credentials
 }
@@ -52,11 +52,23 @@ let mut auth = Authenticator::new(true);
 ### Adding Users
 
 ```rust
-// Add users with passwords
+// Add users with passwords (passwords are automatically hashed with bcrypt)
 auth.add_user("sensor_device".to_string(), "secret123".to_string());
 auth.add_user("admin".to_string(), "admin_pass".to_string());
 auth.add_user("monitor".to_string(), "monitor123".to_string());
+
+// For loading users from a database with pre-hashed passwords:
+auth.add_user_with_hash(
+    "existing_user".to_string(),
+    "$2b$12$KIXQw7gvZZ5V8x...".to_string()  // bcrypt hash from database
+);
 ```
+
+**Password Security:**
+- Passwords are hashed using bcrypt with a cost factor of 12
+- Hashing is computationally expensive by design to prevent brute-force attacks
+- Verification uses constant-time comparison to prevent timing attacks
+- Stored hashes cannot be reversed to obtain the original password
 
 ### Setting Permissions
 
@@ -413,7 +425,6 @@ The authentication module has minimal performance impact on broker operations.
 
 ## Limitations
 
-- Passwords stored in memory (hashing not yet implemented)
 - No password policy enforcement (length, complexity)
 - No rate limiting on authentication attempts
 - No audit logging
@@ -422,7 +433,7 @@ The authentication module has minimal performance impact on broker operations.
 ## Future Enhancements
 
 Planned improvements:
-- [ ] Password hashing (bcrypt/argon2)
+- [x] Password hashing (bcrypt) ✅ **Implemented**
 - [ ] Integration with broker (automatic auth on CONNECT)
 - [ ] External authentication providers
 - [ ] Rate limiting
