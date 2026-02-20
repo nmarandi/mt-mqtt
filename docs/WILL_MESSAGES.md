@@ -81,8 +81,6 @@ broker_tx.send(BrokerMessage::Connect {
     sender: msg_sender,
     response: response_tx,
     will_message,
-    username: None,
-    password: None,
 }).await?;
 ```
 

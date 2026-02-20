@@ -215,17 +215,31 @@ assert!(!auth.can_publish(Some("sensor_device"), "actuators/light"));
 - `+` - Single-level wildcard (e.g., `sensor/+/temp` matches `sensor/room1/temp`)
 - `#` - Multi-level wildcard (e.g., `sensor/#` matches `sensor/room1/temp/data`)
 
-**Usage with Broker:**
+**Usage with Broker (manual integration):**
 ```rust
-use mt_mqtt::broker::Broker;
 use mt_mqtt::auth::Authenticator;
 
-let auth = Authenticator::new(false);
-// ... configure auth ...
+// Create and configure authenticator
+let mut auth = Authenticator::new(false);
+auth.add_user("sensor".to_string(), "secret".to_string());
+auth.set_permissions("sensor".to_string(), TopicPermissions {
+    publish: vec!["sensors/#".to_string()],
+    subscribe: vec!["config/+".to_string()],
+});
 
-let broker = Broker::with_authenticator(auth);
-// Authentication will be checked on CONNECT
+// In your connection handler, validate credentials:
+// let result = auth.authenticate(username, password);
+// if result != AuthResult::Success {
+//     // Reject connection with CONNACK error code
+// }
+//
+// Before allowing publish/subscribe operations:
+// if !auth.can_publish(Some(username), topic) {
+//     // Reject operation
+// }
 ```
+
+*Note: Full broker integration is planned for a future release.*
 
 ### Persistence (Optional SQLite Backend)
 ```bash

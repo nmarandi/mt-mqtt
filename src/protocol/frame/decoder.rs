@@ -22,7 +22,12 @@ pub fn decode_fix_header(src: &mut Cursor<&[u8]>) -> Option<FixHeader> {
 pub fn decode_connect_packet(src: &mut Cursor<&[u8]>) -> Result<ConnectControlPacket, Error> {
     let mut connect_control_packet: ConnectControlPacket = Default::default();
     connect_control_packet.variable_header = decode_connect_variable_header(src)?;
-    connect_control_packet.payload = decode_connect_payload(src, connect_control_packet.variable_header.connect_flag.clone())?;
+    let protocol_version = connect_control_packet.variable_header.protocol_version;
+    connect_control_packet.payload = decode_connect_payload(
+        src, 
+        connect_control_packet.variable_header.connect_flag.clone(),
+        protocol_version
+    )?;
     Ok(connect_control_packet)
 }
 pub fn decode_connect_variable_header(src: &mut Cursor<&[u8]>) -> Result<ConnectVariableHeader, Error> {
@@ -39,11 +44,16 @@ pub fn decode_connect_variable_header(src: &mut Cursor<&[u8]>) -> Result<Connect
     }
     Ok(connect_variable_header)
 }
-pub fn decode_connect_payload(src: &mut Cursor<&[u8]>, connect_flag: ConnectFlags) -> Result<ConnectPayload, Error> {
+pub fn decode_connect_payload(src: &mut Cursor<&[u8]>, connect_flag: ConnectFlags, protocol_version: u8) -> Result<ConnectPayload, Error> {
     let mut connect_payload: ConnectPayload = Default::default();
     connect_payload.client_identifier = decode_string(src)?;
     if connect_flag.will_flag {
-        connect_payload.will_properties = decode_properties(src)?;
+        // Will properties are only present in MQTT 5.0
+        if protocol_version == 5 {
+            connect_payload.will_properties = decode_properties(src)?;
+        } else {
+            connect_payload.will_properties = Vec::new();
+        }
         connect_payload.will_topic = Some(decode_string(src)?);
         connect_payload.will_payload = Some(decode_binary_data(src)?);
     }

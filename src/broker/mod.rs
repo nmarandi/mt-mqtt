@@ -1,5 +1,4 @@
 pub mod publisher;
-pub mod subscriber;
 
 use crate::session::SessionManager;
 use crate::topic::TopicTree;
@@ -120,7 +119,8 @@ impl Broker {
                     // Store client sender
                     self.clients.insert(client_id.clone(), sender.clone());
 
-                    // Store will message if provided
+                    // Clear any existing will message for this client, then store new one if provided
+                    self.will_messages.remove(&client_id);
                     if let Some(will) = will_message {
                         tracing::info!("Broker: Stored will message for client {} on topic {}", client_id, will.topic);
                         self.will_messages.insert(client_id.clone(), will);

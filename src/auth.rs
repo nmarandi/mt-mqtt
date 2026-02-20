@@ -135,14 +135,22 @@ impl Authenticator {
         let mut topic_idx = 0;
         let mut pattern_idx = 0;
 
-        while pattern_idx < pattern_parts.len() && topic_idx < topic_parts.len() {
+        while pattern_idx < pattern_parts.len() {
             let pattern_part = pattern_parts[pattern_idx];
 
             if pattern_part == "#" {
-                // Multi-level wildcard matches everything after
+                // Multi-level wildcard must be last segment and matches zero or more levels
+                // Verify it's the last segment
+                if pattern_idx != pattern_parts.len() - 1 {
+                    return false; // Invalid pattern: # must be last
+                }
+                // Matches everything remaining (including nothing)
                 return true;
+            } else if topic_idx >= topic_parts.len() {
+                // Pattern has more parts but topic is exhausted
+                return false;
             } else if pattern_part == "+" {
-                // Single-level wildcard matches this level
+                // Single-level wildcard matches exactly one level
                 topic_idx += 1;
                 pattern_idx += 1;
             } else if pattern_part == topic_parts[topic_idx] {
@@ -155,8 +163,8 @@ impl Authenticator {
             }
         }
 
-        // Both must be fully consumed
-        topic_idx == topic_parts.len() && pattern_idx == pattern_parts.len()
+        // Both must be fully consumed (all pattern parts matched and all topic parts consumed)
+        topic_idx == topic_parts.len()
     }
 }
 
@@ -245,6 +253,8 @@ mod tests {
             },
         );
 
+        // Multi-level wildcard should match zero or more levels
+        assert!(auth.can_publish(Some("user1"), "home"));
         assert!(auth.can_publish(Some("user1"), "home/temp"));
         assert!(auth.can_publish(Some("user1"), "home/room1/temp"));
         assert!(auth.can_publish(Some("user1"), "home/room1/sensors/temp"));

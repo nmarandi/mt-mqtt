@@ -12,11 +12,13 @@ MT-MQTT includes a flexible authentication and authorization module that provide
 
 The authentication module (`src/auth.rs`) is standalone and can be integrated with the broker or used independently.
 
+> **⚠️ Security Warning**: The current implementation stores passwords in cleartext in memory. This is a security risk in production environments. Future versions will implement password hashing (e.g., Argon2, bcrypt) to protect credentials. For production use, passwords should be hashed before storage and validated using constant-time comparison.
+
 ### Components
 
 ```rust
 pub struct Authenticator {
-    credentials: HashMap<String, String>,       // username -> password
+    credentials: HashMap<String, String>,       // username -> password (CLEARTEXT - not production-ready)
     acl: HashMap<String, TopicPermissions>,     // username -> permissions
     allow_anonymous: bool,                       // allow connections without credentials
 }
