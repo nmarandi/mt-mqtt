@@ -36,7 +36,7 @@ impl TopicTree {
             if splitted_topic.len() > 1 {
                 topic
                     .sub_topics
-                    .insert(topic_str, Box::new(TopicTree::new(splitted_topic[1].to_string(), topic_subscriber_id)));
+                    .insert(topic_str, Box::new(TopicTree::new(splitted_topic[1], topic_subscriber_id)));
             } else {
                 topic.sub_topics.insert(topic_str, Box::new(TopicTree::new("", topic_subscriber_id)));
             }
@@ -131,7 +131,7 @@ impl TopicTree {
                 for (_, elem) in self.sub_topics.iter_mut() {
                     for multi_ids in self.single_level_topic_subscribers_id.iter() {
                         if splitted_topic.len() > 1 {
-                            elem.subscribe(splitted_topic[1].to_string(), multi_ids);
+                            elem.subscribe(splitted_topic[1], multi_ids);
                         } else {
                             elem.subscribe("", multi_ids);
                         }
@@ -307,15 +307,15 @@ impl TopicTree {
         } else {
             let splitted_topic: Vec<&str> = topic_str.as_ref().splitn(2, '/').collect();
             if splitted_topic.len() > 1 {
-                return self.sub_topics.get_mut(splitted_topic[0]).unwrap().get_subscribers_id(splitted_topic[1]);
+                self.sub_topics.get_mut(splitted_topic[0]).unwrap().get_subscribers_id(splitted_topic[1])
             } else {
-                return match self.sub_topics.entry(String::from(splitted_topic[0])) {
+                match self.sub_topics.entry(String::from(splitted_topic[0])) {
                     Entry::Occupied(o) => o.into_mut().get_subscribers_id(""),
                     Entry::Vacant(_) => match self.multi_level_topic_subscribers_id.len() {
                         0 => None,
                         _ => Some(self.multi_level_topic_subscribers_id.clone().into_iter().collect()),
                     },
-                };
+                }
             }
         }
     }

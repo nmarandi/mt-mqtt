@@ -1,3 +1,6 @@
+// Allow field assignments after Default::default() for clarity in decoder patterns
+#![allow(clippy::field_reassign_with_default)]
+
 use super::Error;
 use crate::protocol::{definitions::*, packet::*};
 use bytes::{Buf, Bytes, BytesMut};
