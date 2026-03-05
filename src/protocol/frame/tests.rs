@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod tests {
+mod frame_tests {
     use super::super::*;
     use bytes::BytesMut;
     use std::io::Cursor;
@@ -7,7 +7,7 @@ mod tests {
     #[test]
     fn test_deserialize_mqtt311_connect() {
         // MQTT 3.1.1 CONNECT packet
-        let packet = vec![
+        let packet = [
             0x10, // CONNECT packet type
             0x10, // Remaining length = 16
             0x00, 0x04, b'M', b'Q', b'T', b'T', // Protocol name
@@ -37,7 +37,7 @@ mod tests {
     #[test]
     fn test_deserialize_incomplete_packet() {
         // Incomplete packet (only header, no payload)
-        let packet = vec![0x10, 0x10, 0x00, 0x04];
+        let packet = [0x10, 0x10, 0x00, 0x04];
 
         let mut cursor = Cursor::new(&packet[..]);
         let result = Frame::deserialize(&mut cursor);
@@ -63,7 +63,7 @@ mod tests {
         assert!(result.is_ok(), "Failed to serialize CONNACK");
 
         let bytes = result.unwrap();
-        assert!(bytes.len() > 0, "Serialized packet should not be empty");
+        assert!(!bytes.is_empty(), "Serialized packet should not be empty");
 
         // First byte should be CONNACK packet type
         assert_eq!(bytes[0] & 0xF0, 0x20);
@@ -73,7 +73,7 @@ mod tests {
     fn test_deserialize_publish_qos0() {
         // PUBLISH packet QoS 0 with MQTT 3.1.1 format (no properties field)
         // Note: The decoder handles MQTT 3.1.1 without properties field
-        let packet = vec![
+        let packet = [
             0x30, // PUBLISH packet type, QoS 0
             0x0E, // Remaining length = 14 (2 bytes topic len + 10 bytes topic + 2 bytes payload)
             0x00, 0x0A, // Topic length = 10
@@ -100,7 +100,7 @@ mod tests {
     #[test]
     fn test_deserialize_subscribe() {
         // SUBSCRIBE packet for MQTT 3.1.1 (no properties field)
-        let packet = vec![
+        let packet = [
             0x82, // SUBSCRIBE packet type
             0x0F, // Remaining length = 15 (2 + 2 + 10 + 1)
             0x00, 0x01, // Packet ID = 1
@@ -164,7 +164,7 @@ mod tests {
     #[test]
     fn test_decode_string_incomplete() {
         // String length says 10 bytes, but only 5 bytes available
-        let bytes = vec![0x00, 0x0A, b't', b'e', b's', b't', b'!'];
+        let bytes = [0x00, 0x0A, b't', b'e', b's', b't', b'!'];
 
         let mut cursor = Cursor::new(&bytes[..]);
         let result = super::super::decoder::decode_string(&mut cursor);

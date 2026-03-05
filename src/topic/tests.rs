@@ -53,21 +53,6 @@ mod tests {
         assert_eq!(subscribers.len(), 3);
     }
 
-    // TODO: Implement unsubscribe functionality
-    // #[test]
-    // fn test_unsubscribe() {
-    //     let tree = TopicTree::new_root();
-    //     tree.subscribe("test/topic", "client1");
-    //     tree.subscribe("test/topic", "client2");
-    //
-    //     tree.unsubscribe("test/topic", "client1");
-    //
-    //     let subscribers = tree.get_subscribers("test/topic");
-    //     assert_eq!(subscribers.len(), 1);
-    //     assert!(!subscribers.contains(&"client1".to_string()));
-    //     assert!(subscribers.contains(&"client2".to_string()));
-    // }
-
     #[test]
     fn test_unsubscribe_basic() {
         let mut tree = TopicTree::new_root();

@@ -543,7 +543,7 @@ async fn test_persistent_session() {
     });
 
     // Connect client with clean_session=false (persistent)
-    let (client_tx, mut client_rx) = mpsc::channel(100);
+    let (client_tx, _client_rx) = mpsc::channel(100);
     let (conn_tx, conn_rx) = tokio::sync::oneshot::channel();
     broker_tx
         .send(BrokerMessage::Connect {
