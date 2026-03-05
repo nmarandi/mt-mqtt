@@ -23,11 +23,7 @@ pub fn decode_connect_packet(src: &mut Cursor<&[u8]>) -> Result<ConnectControlPa
     let mut connect_control_packet: ConnectControlPacket = Default::default();
     connect_control_packet.variable_header = decode_connect_variable_header(src)?;
     let protocol_version = connect_control_packet.variable_header.protocol_version;
-    connect_control_packet.payload = decode_connect_payload(
-        src, 
-        connect_control_packet.variable_header.connect_flag.clone(),
-        protocol_version
-    )?;
+    connect_control_packet.payload = decode_connect_payload(src, connect_control_packet.variable_header.connect_flag.clone(), protocol_version)?;
     Ok(connect_control_packet)
 }
 pub fn decode_connect_variable_header(src: &mut Cursor<&[u8]>) -> Result<ConnectVariableHeader, Error> {
