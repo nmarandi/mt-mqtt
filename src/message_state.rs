@@ -47,15 +47,10 @@ impl MessageStateTracker {
 
     /// Handle PUBREC received (QoS 2 step 1 complete, move to step 2)
     pub fn handle_pubrec(&mut self, packet_id: u16) -> bool {
-        if let Some(state) = self.states.get(&packet_id) {
-            match state {
-                MessageState::WaitingForPubRec { topic, .. } => {
-                    let topic = topic.clone();
-                    self.states.insert(packet_id, MessageState::WaitingForPubComp { topic });
-                    true
-                }
-                _ => false,
-            }
+        if let Some(MessageState::WaitingForPubRec { topic, .. }) = self.states.get(&packet_id) {
+            let topic = topic.clone();
+            self.states.insert(packet_id, MessageState::WaitingForPubComp { topic });
+            true
         } else {
             false
         }
