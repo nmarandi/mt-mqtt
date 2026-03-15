@@ -55,11 +55,8 @@ pub fn encode_sub_ack_payload(src: SubAckPayload, bytes: &mut BytesMut) {
 #[allow(dead_code)]
 pub fn encode_properties(src: Vec<Option<Property>>, bytes: &mut BytesMut) {
     let mut data: BytesMut = BytesMut::new();
-    for elem in src.iter() {
-        match elem {
-            Some(property) => encode_property(property, &mut data),
-            None => (),
-        }
+    for property in src.iter().flatten() {
+        encode_property(property, &mut data);
     }
     bytes.extend(VariableByteInteger::encode_u32(data.len() as u32));
     bytes.extend(data);

@@ -46,7 +46,7 @@ fn bench_topic_matching(c: &mut Criterion) {
     group.bench_function("many_subscribers", |b| {
         let mut tree = TopicTree::new_root();
         for i in 0..1000 {
-            tree.subscribe(&format!("sensor/device{}", i), &format!("client{}", i));
+            tree.subscribe(format!("sensor/device{}", i), format!("client{}", i));
         }
 
         b.iter(|| {
@@ -168,7 +168,7 @@ fn bench_message_routing(c: &mut Criterion) {
     group.bench_function("route_to_multiple_subscribers", |b| {
         let mut tree = TopicTree::new_root();
         for i in 0..10 {
-            tree.subscribe("sensor/temperature", &format!("client{}", i));
+            tree.subscribe("sensor/temperature", format!("client{}", i));
         }
 
         b.iter(|| {
@@ -199,7 +199,7 @@ fn bench_topic_tree_scale(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("lookup_in_tree", topic_count), topic_count, |b, &count| {
             let mut tree = TopicTree::new_root();
             for i in 0..count {
-                tree.subscribe(&format!("sensor/device{}/data", i), &format!("client{}", i % 100));
+                tree.subscribe(format!("sensor/device{}/data", i), format!("client{}", i % 100));
             }
 
             b.iter(|| {

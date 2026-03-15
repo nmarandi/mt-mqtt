@@ -22,7 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     #[cfg(not(feature = "sqlite"))]
-    let persistence: Arc<dyn PersistenceBackend> = {
+    let _persistence: Arc<dyn PersistenceBackend> = {
         let mut backend = InMemoryBackend;
         backend.init().await?;
         Arc::new(backend)

@@ -83,11 +83,11 @@ impl Frame {
             },
             ControlPacketType::UNSUBSCRIBE => Frame {
                 fix_header: FixHeader::new(control_packet_type, Flags(0, 0, 0, 0)),
-                control_packet: ControlPacket::Unsubscribe(Default::default()),
+                control_packet: ControlPacket::Unsubscribe(()),
             },
             ControlPacketType::UNSUBACK => Frame {
                 fix_header: FixHeader::new(control_packet_type, Flags(0, 0, 0, 0)),
-                control_packet: ControlPacket::UnsubAck(Default::default()),
+                control_packet: ControlPacket::UnsubAck(()),
             },
             ControlPacketType::PINGREQ => Frame {
                 fix_header: FixHeader::new(control_packet_type, Flags(0, 0, 0, 0)),
@@ -99,11 +99,11 @@ impl Frame {
             },
             ControlPacketType::DISCONNECT => Frame {
                 fix_header: FixHeader::new(control_packet_type, Flags(0, 0, 0, 0)),
-                control_packet: ControlPacket::Disconnect(Default::default()),
+                control_packet: ControlPacket::Disconnect(()),
             },
             ControlPacketType::AUTH => Frame {
                 fix_header: FixHeader::new(control_packet_type, Flags(0, 0, 0, 0)),
-                control_packet: ControlPacket::Auth(Default::default()),
+                control_packet: ControlPacket::Auth(()),
             },
         }
     }
