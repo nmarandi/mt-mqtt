@@ -330,16 +330,12 @@ pub struct SubscribeControlPacket {
     pub variable_header: SubscribeVariableHeader,
 }
 #[repr(u8)]
-#[derive(Display, Debug, Clone, FromPrimitive)]
+#[derive(Display, Debug, Clone, FromPrimitive, Default)]
 pub enum RetainHandlingOption {
+    #[default]
     SendRetainedMessageSubTime = 0,
     SendRetainedMessageSubNotExist = 1,
     NotSendRetainedMessage = 2,
-}
-impl Default for RetainHandlingOption {
-    fn default() -> Self {
-        Self::SendRetainedMessageSubTime
-    }
 }
 #[derive(Debug, Default)]
 #[allow(dead_code)]

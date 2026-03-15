@@ -1,8 +1,7 @@
 /// Persistence layer abstraction for session and message storage
-/// 
+///
 /// This trait allows swapping between different storage backends (SQLite, RocksDB, etc.)
 /// without changing the broker code.
-
 use crate::broker::PublishMessage;
 use async_trait::async_trait;
 use std::collections::HashSet;
@@ -64,13 +63,13 @@ pub trait PersistenceBackend: Send + Sync {
 pub enum PersistenceError {
     #[error("Database error: {0}")]
     Database(String),
-    
+
     #[error("Serialization error: {0}")]
     Serialization(String),
-    
+
     #[error("Not found")]
     NotFound,
-    
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 }

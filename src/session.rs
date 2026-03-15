@@ -2,7 +2,7 @@ use crate::{
     broker::PublishMessage,
     message_state::MessageStateTracker,
     packet_id::PacketIdManager,
-    persistence::{PersistenceBackend, PersistedMessage, PersistedSession},
+    persistence::{PersistedMessage, PersistedSession, PersistenceBackend},
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -116,7 +116,7 @@ impl SessionManager {
         } else {
             // Persistent session requested - check if session exists
             let in_memory = self.sessions.contains_key(&client_id);
-            
+
             if !in_memory && self.persistence.is_some() {
                 // Try to load from persistence
                 if let Some(backend) = &self.persistence {
@@ -124,7 +124,7 @@ impl SessionManager {
                         // Restore session from persistence
                         let mut session = Session::new(client_id.clone(), true);
                         session.subscriptions = persisted.subscriptions;
-                        
+
                         // Load queued messages
                         if let Ok(messages) = backend.get_queued_messages(&client_id).await {
                             for msg in messages {
@@ -136,7 +136,7 @@ impl SessionManager {
                                 });
                             }
                         }
-                        
+
                         self.sessions.insert(client_id.clone(), session);
                         true
                     } else {
@@ -151,7 +151,9 @@ impl SessionManager {
         };
 
         // Get or create session
-        let session = self.sessions.entry(client_id.clone())
+        let session = self
+            .sessions
+            .entry(client_id.clone())
             .or_insert_with(|| Session::new(client_id, !clean_session));
 
         // Update persistent flag in case it changed
@@ -189,8 +191,7 @@ impl SessionManager {
                         persistent: session.persistent,
                         subscriptions: session.subscriptions.clone(),
                     };
-                    backend.save_session(&persisted).await
-                        .map_err(|e| e.to_string())?;
+                    backend.save_session(&persisted).await.map_err(|e| e.to_string())?;
                 }
             }
         }
@@ -207,8 +208,7 @@ impl SessionManager {
                 qos: message.qos,
                 retain: message.retain,
             };
-            backend.queue_message(&persisted).await
-                .map_err(|e| e.to_string())?;
+            backend.queue_message(&persisted).await.map_err(|e| e.to_string())?;
         }
         Ok(())
     }
@@ -216,8 +216,7 @@ impl SessionManager {
     /// Clear queued messages from persistence after delivery
     pub async fn clear_persisted_messages(&self, client_id: &str) -> Result<(), String> {
         if let Some(backend) = &self.persistence {
-            backend.delete_queued_messages(client_id).await
-                .map_err(|e| e.to_string())?;
+            backend.delete_queued_messages(client_id).await.map_err(|e| e.to_string())?;
         }
         Ok(())
     }
@@ -248,11 +247,11 @@ mod tests {
         session.add_subscription("topic/1".to_string());
         session.add_subscription("topic/2".to_string());
         assert_eq!(session.subscriptions.len(), 2);
-        
+
         // Adding duplicate should not increase count
         session.add_subscription("topic/1".to_string());
         assert_eq!(session.subscriptions.len(), 2);
-        
+
         session.remove_subscription("topic/1");
         assert_eq!(session.subscriptions.len(), 1);
         assert!(session.subscriptions.contains("topic/2"));
@@ -261,7 +260,7 @@ mod tests {
     #[test]
     fn test_session_message_queueing() {
         let mut session = Session::new("client1".to_string(), true);
-        
+
         // QoS 0 should not be queued
         let msg_qos0 = PublishMessage {
             topic: "test".to_string(),
@@ -271,7 +270,7 @@ mod tests {
         };
         session.queue_message(msg_qos0);
         assert_eq!(session.pending_messages.len(), 0);
-        
+
         // QoS 1 should be queued
         let msg_qos1 = PublishMessage {
             topic: "test".to_string(),
@@ -281,7 +280,7 @@ mod tests {
         };
         session.queue_message(msg_qos1);
         assert_eq!(session.pending_messages.len(), 1);
-        
+
         // QoS 2 should be queued
         let msg_qos2 = PublishMessage {
             topic: "test".to_string(),
@@ -296,11 +295,11 @@ mod tests {
     #[tokio::test]
     async fn test_session_manager_clean_session() {
         let mut manager = SessionManager::new();
-        
+
         // First connection with clean_session=true
         let (session_present, _session) = manager.get_or_create_session("client1".to_string(), true).await;
         assert!(!session_present);
-        
+
         // Reconnect with clean_session=true should not have session present
         let (session_present, _session) = manager.get_or_create_session("client1".to_string(), true).await;
         assert!(!session_present);
@@ -309,12 +308,12 @@ mod tests {
     #[tokio::test]
     async fn test_session_manager_persistent_session() {
         let mut manager = SessionManager::new();
-        
+
         // First connection with clean_session=false
         let (session_present, session) = manager.get_or_create_session("client1".to_string(), false).await;
         assert!(!session_present); // First time, no session exists
         session.add_subscription("topic/1".to_string());
-        
+
         // Reconnect with clean_session=false should restore session
         let (session_present, session) = manager.get_or_create_session("client1".to_string(), false).await;
         assert!(session_present); // Session should be present
@@ -325,11 +324,11 @@ mod tests {
     #[tokio::test]
     async fn test_session_manager_clean_clears_persistent() {
         let mut manager = SessionManager::new();
-        
+
         // Create persistent session
         let (_session_present, session) = manager.get_or_create_session("client1".to_string(), false).await;
         session.add_subscription("topic/1".to_string());
-        
+
         // Reconnect with clean_session=true should clear session
         let (session_present, session) = manager.get_or_create_session("client1".to_string(), true).await;
         assert!(!session_present);
@@ -339,7 +338,7 @@ mod tests {
     #[test]
     fn test_take_pending_messages() {
         let mut session = Session::new("client1".to_string(), true);
-        
+
         let msg1 = PublishMessage {
             topic: "test".to_string(),
             payload: vec![1, 2, 3],
@@ -352,11 +351,11 @@ mod tests {
             qos: 2,
             retain: false,
         };
-        
+
         session.queue_message(msg1);
         session.queue_message(msg2);
         assert_eq!(session.pending_messages.len(), 2);
-        
+
         let messages = session.take_pending_messages();
         assert_eq!(messages.len(), 2);
         assert_eq!(session.pending_messages.len(), 0);

@@ -1,3 +1,6 @@
+// Allow manual Default implementations for enums with specific default values
+#![allow(clippy::derivable_impls)]
+
 use bytes::{Buf, Bytes};
 use num_derive::{FromPrimitive, ToPrimitive};
 use std::io::Cursor;
@@ -307,9 +310,7 @@ pub fn have_packet_identifier(fix_header: FixHeader) -> bool {
         | ControlPacketType::SUBACK
         | ControlPacketType::UNSUBSCRIBE
         | ControlPacketType::UNSUBACK => true,
-        ControlPacketType::PUBLISH => {
-            fix_header.flags.1 > 0 
-        }
+        ControlPacketType::PUBLISH => fix_header.flags.1 > 0,
     }
 }
 #[derive(Debug)]

@@ -1,5 +1,4 @@
 pub mod publisher;
-pub mod subscriber;
 
 use crate::session::SessionManager;
 use crate::topic::TopicTree;
@@ -23,10 +22,13 @@ pub enum BrokerMessage {
         sender: Sender<PublishMessage>,
         // Response channel to send back session_present flag
         response: tokio::sync::oneshot::Sender<bool>,
+        // Will message information
+        will_message: Option<WillMessage>,
     },
     // Client disconnects
     Disconnect {
         client_id: String,
+        graceful: bool,
     },
     // Client subscribes to topics
     Subscribe {
@@ -42,6 +44,13 @@ pub enum BrokerMessage {
     Publish(PublishMessage),
 }
 
+#[derive(Debug, Clone)]
+pub struct WillMessage {
+    pub topic: String,
+    pub payload: Vec<u8>,
+    pub qos: u8,
+    pub retain: bool,
+}
 
 pub struct Broker {
     // Client ID -> message sender channel
@@ -55,6 +64,14 @@ pub struct Broker {
     // Channel for receiving broker commands
     sender: Sender<BrokerMessage>,
     receiver: Receiver<BrokerMessage>,
+    // Will messages per client (client_id -> will_message)
+    will_messages: HashMap<String, WillMessage>,
+}
+
+impl Default for Broker {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Broker {
@@ -68,17 +85,24 @@ impl Broker {
             session_manager: SessionManager::new(),
             sender,
             receiver,
+            will_messages: HashMap::new(),
         }
     }
 
     pub async fn run(mut self) {
         tracing::info!("Broker started and ready to route messages");
-        
+
         while let Some(message) = self.receiver.recv().await {
             match message {
-                BrokerMessage::Connect { client_id, clean_session, sender, response } => {
+                BrokerMessage::Connect {
+                    client_id,
+                    clean_session,
+                    sender,
+                    response,
+                    will_message,
+                } => {
                     tracing::info!("Broker: Client {} connected (clean_session={})", client_id, clean_session);
-                    
+
                     // If clean_session=true, we need to clean up old subscriptions from topic tree
                     if clean_session {
                         if let Some(old_session) = self.session_manager.get_session(&client_id) {
@@ -89,19 +113,25 @@ impl Broker {
                             }
                         }
                     }
-                    
+
                     // Get or create session and determine if session was present
-                    let (session_present, session) = self.session_manager
-                        .get_or_create_session(client_id.clone(), clean_session).await;
-                    
+                    let (session_present, session) = self.session_manager.get_or_create_session(client_id.clone(), clean_session).await;
+
                     tracing::info!("Broker: Session present for client {}: {}", client_id, session_present);
-                    
+
                     // Send response back to client
                     let _ = response.send(session_present);
-                    
+
                     // Store client sender
                     self.clients.insert(client_id.clone(), sender.clone());
-                    
+
+                    // Clear any existing will message for this client, then store new one if provided
+                    self.will_messages.remove(&client_id);
+                    if let Some(will) = will_message {
+                        tracing::info!("Broker: Stored will message for client {} on topic {}", client_id, will.topic);
+                        self.will_messages.insert(client_id.clone(), will);
+                    }
+
                     // If session was present (persistent session), restore subscriptions
                     if session_present {
                         let subscriptions = session.subscriptions.clone();
@@ -109,16 +139,15 @@ impl Broker {
                             self.topic_tree.subscribe(topic, &client_id);
                             tracing::debug!("Broker: Restored subscription for client {} to topic {}", client_id, topic);
                         }
-                        
+
                         // Send any pending messages to the reconnected client
                         let pending_messages = session.take_pending_messages();
                         if !pending_messages.is_empty() {
-                            tracing::info!("Broker: Delivering {} pending messages to client {}", 
-                                pending_messages.len(), client_id);
-                            
+                            tracing::info!("Broker: Delivering {} pending messages to client {}", pending_messages.len(), client_id);
+
                             // Clear persisted messages after loading
                             let _ = self.session_manager.clear_persisted_messages(&client_id).await;
-                            
+
                             for msg in pending_messages {
                                 if let Some(client_sender) = self.clients.get(&client_id) {
                                     let _ = client_sender.send(msg).await;
@@ -127,13 +156,52 @@ impl Broker {
                         }
                     }
                 }
-                
-                BrokerMessage::Disconnect { client_id } => {
-                    tracing::info!("Broker: Client {} disconnected", client_id);
-                    
+
+                BrokerMessage::Disconnect { client_id, graceful } => {
+                    tracing::info!("Broker: Client {} disconnected (graceful={})", client_id, graceful);
+
+                    // If disconnect was not graceful, publish will message
+                    if !graceful {
+                        if let Some(will) = self.will_messages.remove(&client_id) {
+                            tracing::info!("Broker: Publishing will message for client {} on topic {}", client_id, will.topic);
+
+                            // Publish will message
+                            let will_msg = PublishMessage {
+                                topic: will.topic,
+                                payload: will.payload,
+                                qos: will.qos,
+                                retain: will.retain,
+                            };
+
+                            // Handle retained will message
+                            if will_msg.retain {
+                                if will_msg.payload.is_empty() {
+                                    self.retained_messages.remove(&will_msg.topic);
+                                } else {
+                                    self.retained_messages.insert(will_msg.topic.clone(), will_msg.clone());
+                                }
+                            }
+
+                            // Route to subscribers
+                            let subscribers = self.topic_tree.get_subscribers(&will_msg.topic);
+                            for subscriber_id in &subscribers {
+                                if let Some(client_sender) = self.clients.get(subscriber_id) {
+                                    let _ = client_sender.send(will_msg.clone()).await;
+                                } else if let Some(session) = self.session_manager.get_session_mut(subscriber_id) {
+                                    if session.persistent && will_msg.qos > 0 {
+                                        session.queue_message(will_msg.clone());
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Graceful disconnect - remove will message without publishing
+                        self.will_messages.remove(&client_id);
+                    }
+
                     // Remove from active clients
                     self.clients.remove(&client_id);
-                    
+
                     // If session is not persistent, clean it up
                     if let Some(session) = self.session_manager.get_session(&client_id) {
                         if !session.persistent {
@@ -146,34 +214,34 @@ impl Broker {
                         } else {
                             // Persist session state and queued messages for persistent sessions
                             let _ = self.session_manager.persist_session(&client_id).await;
-                            
+
                             // Persist queued messages
                             if let Some(session) = self.session_manager.get_session(&client_id) {
                                 for msg in &session.pending_messages {
                                     let _ = self.session_manager.persist_queued_message(&client_id, msg).await;
                                 }
                             }
-                            
+
                             tracing::debug!("Broker: Persisted session and messages for client {}", client_id);
                         }
                     }
                 }
-                
+
                 BrokerMessage::Subscribe { client_id, topics } => {
                     tracing::debug!("Broker: Client {} subscribing to {:?}", client_id, topics);
-                    
+
                     // Add to topic tree
                     for topic in &topics {
                         self.topic_tree.subscribe(topic, &client_id);
-                        
+
                         // Store subscription in session
                         if let Some(session) = self.session_manager.get_session_mut(&client_id) {
                             session.add_subscription(topic.clone());
                         }
-                        
+
                         // Persist the session with new subscription
                         let _ = self.session_manager.persist_session(&client_id).await;
-                        
+
                         // Send retained message if exists
                         if let Some(retained_msg) = self.retained_messages.get(topic) {
                             if let Some(client_sender) = self.clients.get(&client_id) {
@@ -182,24 +250,23 @@ impl Broker {
                         }
                     }
                 }
-                
+
                 BrokerMessage::Unsubscribe { client_id, topics } => {
                     tracing::debug!("Broker: Client {} unsubscribing from {:?}", client_id, topics);
-                    
+
                     for topic in &topics {
                         self.topic_tree.unsubscribe(topic, &client_id);
-                        
+
                         // Remove from session
                         if let Some(session) = self.session_manager.get_session_mut(&client_id) {
                             session.remove_subscription(topic);
                         }
                     }
                 }
-                
+
                 BrokerMessage::Publish(msg) => {
-                    tracing::debug!("Broker: Publishing to topic '{}', payload size: {} bytes", 
-                            msg.topic, msg.payload.len());
-                    
+                    tracing::debug!("Broker: Publishing to topic '{}', payload size: {} bytes", msg.topic, msg.payload.len());
+
                     // Store retained message
                     if msg.retain {
                         if msg.payload.is_empty() {
@@ -208,11 +275,11 @@ impl Broker {
                             self.retained_messages.insert(msg.topic.clone(), msg.clone());
                         }
                     }
-                    
+
                     // Find all subscribers matching this topic
                     let subscribers = self.find_subscribers(&msg.topic);
                     tracing::debug!("Broker: Found {} subscribers for topic '{}'", subscribers.len(), msg.topic);
-                    
+
                     // Send message to all matching subscribers
                     for subscriber_id in subscribers {
                         if let Some(client_sender) = self.clients.get(&subscriber_id) {
@@ -220,7 +287,7 @@ impl Broker {
                             let sender_clone = client_sender.clone();
                             let msg_clone = msg.clone();
                             let sub_id = subscriber_id.clone();
-                            
+
                             // Spawn task to send message in parallel
                             tokio::spawn(async move {
                                 match sender_clone.send(msg_clone).await {
@@ -233,10 +300,9 @@ impl Broker {
                             if session.persistent && msg.qos > 0 {
                                 // Queue message for offline delivery
                                 session.queue_message(msg.clone());
-                                
-                                tracing::debug!("Broker: Queued message for offline client {} (QoS {})", 
-                                    subscriber_id, msg.qos);
-                                
+
+                                tracing::debug!("Broker: Queued message for offline client {} (QoS {})", subscriber_id, msg.qos);
+
                                 // Note: Persistence happens on disconnect to avoid borrowing issues
                                 // Messages are queued in-memory and persisted when client disconnects
                             }

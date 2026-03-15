@@ -36,7 +36,7 @@ impl TopicTree {
             if splitted_topic.len() > 1 {
                 topic
                     .sub_topics
-                    .insert(topic_str, Box::new(TopicTree::new(splitted_topic[1].to_string(), topic_subscriber_id)));
+                    .insert(topic_str, Box::new(TopicTree::new(splitted_topic[1], topic_subscriber_id)));
             } else {
                 topic.sub_topics.insert(topic_str, Box::new(TopicTree::new("", topic_subscriber_id)));
             }
@@ -77,11 +77,15 @@ impl TopicTree {
                     // Add to multi-level subscribers of the current topic
                     match self.sub_topics.entry(topic_str.clone()) {
                         Entry::Occupied(o) => {
-                            o.into_mut().multi_level_topic_subscribers_id.insert(String::from(topic_subscriber_id.as_ref()));
+                            o.into_mut()
+                                .multi_level_topic_subscribers_id
+                                .insert(String::from(topic_subscriber_id.as_ref()));
                         }
                         Entry::Vacant(v) => {
                             let mut new_node = TopicTree::new_root();
-                            new_node.multi_level_topic_subscribers_id.insert(String::from(topic_subscriber_id.as_ref()));
+                            new_node
+                                .multi_level_topic_subscribers_id
+                                .insert(String::from(topic_subscriber_id.as_ref()));
                             v.insert(Box::new(new_node));
                         }
                     }
@@ -127,7 +131,7 @@ impl TopicTree {
                 for (_, elem) in self.sub_topics.iter_mut() {
                     for multi_ids in self.single_level_topic_subscribers_id.iter() {
                         if splitted_topic.len() > 1 {
-                            elem.subscribe(splitted_topic[1].to_string(), multi_ids);
+                            elem.subscribe(splitted_topic[1], multi_ids);
                         } else {
                             elem.subscribe("", multi_ids);
                         }
@@ -140,19 +144,15 @@ impl TopicTree {
     }
 
     pub fn unsubscribe<S: AsRef<str>, T: AsRef<str>>(&mut self, topic_str: S, topic_subscriber_id: T) {
-        let splitted_topic: Vec<&str> = topic_str
-            .as_ref()
-            .split('/')
-            .filter(|x| !x.is_empty())
-            .collect();
-        
+        let splitted_topic: Vec<&str> = topic_str.as_ref().split('/').filter(|x| !x.is_empty()).collect();
+
         if splitted_topic.is_empty() {
             self.topic_subscribers_id.remove(topic_subscriber_id.as_ref());
             return;
         }
-        
+
         let topic = splitted_topic[0];
-        
+
         // Handle wildcards at the current level
         if topic == "#" {
             self.multi_level_topic_subscribers_id.remove(topic_subscriber_id.as_ref());
@@ -162,12 +162,12 @@ impl TopicTree {
             }
             return;
         }
-        
+
         if topic == "+" {
             self.single_level_topic_subscribers_id.remove(topic_subscriber_id.as_ref());
             return;
         }
-        
+
         // Check if this is a multi-level wildcard subscription like "sensor/#"
         if splitted_topic.len() > 1 && splitted_topic[1] == "#" {
             if let Some(node) = self.sub_topics.get_mut(topic) {
@@ -179,7 +179,7 @@ impl TopicTree {
             }
             return;
         }
-        
+
         // Check if this is a single-level wildcard subscription like "sensor/+"
         if splitted_topic.len() > 1 && splitted_topic[1] == "+" {
             if let Some(node) = self.sub_topics.get_mut(topic) {
@@ -191,12 +191,12 @@ impl TopicTree {
             }
             return;
         }
-        
+
         // For deeper paths, recursively unsubscribe
         if splitted_topic.len() > 1 {
             let remaining_parts: Vec<&str> = splitted_topic[1..].to_vec();
             let remaining = remaining_parts.join("/");
-            
+
             if let Some(node) = self.sub_topics.get_mut(topic) {
                 node.unsubscribe(remaining, topic_subscriber_id);
             }
@@ -207,7 +207,7 @@ impl TopicTree {
             }
         }
     }
-    
+
     // Helper to recursively remove a subscriber
     fn unsubscribe_recursive(&mut self, wildcard: &str, subscriber_id: &str) {
         if wildcard == "#" {
@@ -236,24 +236,27 @@ impl TopicTree {
             }
         } else {
             let splitted_topic: Vec<&str> = topic_str.as_ref().splitn(2, '/').collect();
-            
+
             // Collect subscribers from multi-level wildcard at this level
             let mut result: Vec<String> = Vec::new();
             result.extend(self.multi_level_topic_subscribers_id.iter().cloned());
-            
+
             // Continue traversing the tree
             if splitted_topic.len() > 1 {
-                if let Some(child_subs) = self.sub_topics.get(splitted_topic[0])
-                    .and_then(|tree| tree.get_subscribers_internal(splitted_topic[1])) {
+                if let Some(child_subs) = self
+                    .sub_topics
+                    .get(splitted_topic[0])
+                    .and_then(|tree| tree.get_subscribers_internal(splitted_topic[1]))
+                {
                     result.extend(child_subs);
                 }
-                
+
                 // Also check if this node has single-level wildcard subscribers
                 // This handles patterns like "sensor/+" matching "sensor/temp/..."
                 if let Some(parent_node) = self.sub_topics.get(splitted_topic[0]) {
                     result.extend(parent_node.single_level_topic_subscribers_id.iter().cloned());
                 }
-                
+
                 // Also check single-level wildcard as a subtopic
                 if let Some(wildcard_tree) = self.sub_topics.get("+") {
                     if let Some(wild_subs) = wildcard_tree.get_subscribers_internal(splitted_topic[1]) {
@@ -269,7 +272,7 @@ impl TopicTree {
                     // Also include single-level wildcard subscribers from the matched node
                     result.extend(tree.single_level_topic_subscribers_id.iter().cloned());
                 }
-                
+
                 // Also check single-level wildcard as a subtopic
                 if let Some(wildcard_tree) = self.sub_topics.get("+") {
                     if let Some(wild_subs) = wildcard_tree.get_subscribers_internal("") {
@@ -277,7 +280,7 @@ impl TopicTree {
                     }
                 }
             }
-            
+
             if result.is_empty() {
                 None
             } else {
@@ -304,15 +307,15 @@ impl TopicTree {
         } else {
             let splitted_topic: Vec<&str> = topic_str.as_ref().splitn(2, '/').collect();
             if splitted_topic.len() > 1 {
-                return self.sub_topics.get_mut(splitted_topic[0]).unwrap().get_subscribers_id(splitted_topic[1]);
+                self.sub_topics.get_mut(splitted_topic[0]).unwrap().get_subscribers_id(splitted_topic[1])
             } else {
-                return match self.sub_topics.entry(String::from(splitted_topic[0])) {
+                match self.sub_topics.entry(String::from(splitted_topic[0])) {
                     Entry::Occupied(o) => o.into_mut().get_subscribers_id(""),
                     Entry::Vacant(_) => match self.multi_level_topic_subscribers_id.len() {
                         0 => None,
                         _ => Some(self.multi_level_topic_subscribers_id.clone().into_iter().collect()),
                     },
-                };
+                }
             }
         }
     }

@@ -34,7 +34,7 @@ impl Client {
     pub fn new(stream: TcpStream, broker_sender: Sender<BrokerMessage>) -> Client {
         let (rd, wr) = tokio::io::split(stream);
         let (_msg_sender, msg_receiver) = mpsc::channel(100);
-        
+
         Client {
             read: rd,
             write: wr,
@@ -55,7 +55,7 @@ impl Client {
             if let Some(frame) = self.deserialize_frame()? {
                 return Ok(frame);
             }
-            
+
             // Not enough data buffered to parse a frame.
             // Attempt to read more data from the socket.
             //
@@ -114,7 +114,7 @@ impl Client {
         let run_start = std::time::Instant::now();
         let (msg_sender, mut msg_receiver) = mpsc::channel(100);
         let mut graceful_disconnect = false;
-        
+
         loop {
             tokio::select! {
                 // Handle incoming frames from client
@@ -122,7 +122,7 @@ impl Client {
                     match frame_result {
                         Ok(msg) => {
                             let frame_time = run_start.elapsed();
-                            tracing::warn!("TIMING: received frame {:?} at +{:?}", 
+                            tracing::warn!("TIMING: received frame {:?} at +{:?}",
                                 msg.fix_header.control_packet_type, frame_time);
                             let (should_continue, is_graceful) = self.handle_frame(msg, &msg_sender).await;
                             if !should_continue {
@@ -136,7 +136,7 @@ impl Client {
                         Err(Error::Other(err)) => {
                             // Don't log error if it's just a normal connection close or forceful termination
                             let err_lower = err.to_lowercase();
-                            if !err_lower.contains("connection ended by peer") 
+                            if !err_lower.contains("connection ended by peer")
                                 && !err_lower.contains("connection reset by peer")
                                 && !err_lower.contains("forcibly closed") {
                                 tracing::error!("Error: {}", err);
@@ -156,88 +156,127 @@ impl Client {
                 }
             }
         }
-        
+
         let total_time = run_start.elapsed();
         tracing::warn!("TIMING: client session total: {:?}", total_time);
-        
+
         // Notify broker of disconnect
-        let _ = self.broker_sender.send(BrokerMessage::Disconnect {
-            client_id: self.id.clone(),
-        }).await;
-        
+        let _ = self
+            .broker_sender
+            .send(BrokerMessage::Disconnect {
+                client_id: self.id.clone(),
+                graceful: graceful_disconnect,
+            })
+            .await;
+
         if graceful_disconnect {
             tracing::info!("Client {} disconnected gracefully", self.id);
         } else {
             tracing::debug!("Client {} connection closed", self.id);
         }
     }
-    
+
     async fn handle_frame(&mut self, msg: Frame, msg_sender: &Sender<PublishMessage>) -> (bool, bool) {
         tracing::debug!("connection_packet: {:?}", msg.control_packet);
-        
+
         match msg.control_packet {
             ControlPacket::Connect(control_packet) => {
                 self.id = control_packet.payload.client_identifier.clone();
                 let clean_session = control_packet.variable_header.connect_flag.clean_start;
-                
+                let connect_flags = &control_packet.variable_header.connect_flag;
+
                 // Generate client ID if empty (MQTT 3.1.1 allows empty client_id for clean session)
                 if self.id.is_empty() {
                     use std::time::{SystemTime, UNIX_EPOCH};
-                    let timestamp = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_micros();
+                    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_micros();
                     self.id = format!("auto-{}", timestamp);
                 }
-                
+
                 tracing::info!("Client connected with ID: {} (clean_session={})", self.id, clean_session);
-                
+
+                // Extract will message if present
+                let will_message = if connect_flags.will_flag {
+                    if let (Some(topic), Some(payload)) = (&control_packet.payload.will_topic, &control_packet.payload.will_payload) {
+                        let will_qos = connect_flags.will_qos;
+                        let will_retain = connect_flags.will_retain;
+
+                        tracing::info!(
+                            "Client {}: Will message configured for topic '{}' (QoS={}, retain={})",
+                            self.id,
+                            topic,
+                            will_qos,
+                            will_retain
+                        );
+
+                        Some(crate::broker::WillMessage {
+                            topic: topic.clone(),
+                            payload: payload.to_vec(),
+                            qos: will_qos,
+                            retain: will_retain,
+                        })
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
                 // Create oneshot channel for response
                 let (tx, rx) = tokio::sync::oneshot::channel();
-                
+
                 // Register with broker
-                let _ = self.broker_sender.send(BrokerMessage::Connect {
-                    client_id: self.id.clone(),
-                    clean_session,
-                    sender: msg_sender.clone(),
-                    response: tx,
-                }).await;
-                
+                let _ = self
+                    .broker_sender
+                    .send(BrokerMessage::Connect {
+                        client_id: self.id.clone(),
+                        clean_session,
+                        sender: msg_sender.clone(),
+                        response: tx,
+                        will_message,
+                    })
+                    .await;
+
                 // Wait for session_present response from broker
                 let session_present = rx.await.unwrap_or(false);
-                
+
                 tracing::debug!("Client {}: Received session_present={}", self.id, session_present);
-                
+
                 // Send CONNACK with session_present flag
                 let mut connack = Frame::new(ControlPacketType::CONNACK);
                 if let ControlPacket::ConnAck(ref mut connack_packet) = connack.control_packet {
                     connack_packet.variable_header.conn_ack_flag.session_present_flag = session_present;
                     connack_packet.variable_header.reason_code = ConnAckReasonCode::Success;
                 }
-                
-                self.write_value(&mut Frame::serialize(connack).unwrap())
-                    .await
-                    .unwrap();
+
+                self.write_value(&mut Frame::serialize(connack).unwrap()).await.unwrap();
                 (true, false)
             }
-            
+
             ControlPacket::Publish(control_packet) => {
                 let qos = msg.fix_header.flags.1;
                 let topic = control_packet.variable_header.topic_name.clone();
                 let payload = control_packet.payload.data.to_vec();
                 let retain = msg.fix_header.flags.0 == 1;
-                
-                tracing::debug!("Received PUBLISH: topic='{}', qos={}, retain={}, payload_len={}", 
-                        topic, qos, retain, payload.len());
-                
-                // Send to broker for distribution
-                let _ = self.broker_sender.send(BrokerMessage::Publish(PublishMessage {
-                    topic: topic.clone(),
-                    payload,
+
+                tracing::debug!(
+                    "Received PUBLISH: topic='{}', qos={}, retain={}, payload_len={}",
+                    topic,
                     qos,
                     retain,
-                })).await;
-                
+                    payload.len()
+                );
+
+                // Send to broker for distribution
+                let _ = self
+                    .broker_sender
+                    .send(BrokerMessage::Publish(PublishMessage {
+                        topic: topic.clone(),
+                        payload,
+                        qos,
+                        retain,
+                    }))
+                    .await;
+
                 // Send acknowledgment based on QoS
                 match qos {
                     1 => {
@@ -246,11 +285,7 @@ impl Client {
                             let pub_ack = Frame {
                                 fix_header: FixHeader::new(ControlPacketType::PUBACK, Flags(0, 0, 0, 0)),
                                 control_packet: ControlPacket::PubAck(PubAckControlPacket {
-                                    variable_header: PubAckVariableHeader::from(
-                                        packet_id,
-                                        PubAckReasonCode::Success,
-                                        Vec::new(),
-                                    ),
+                                    variable_header: PubAckVariableHeader::from(packet_id, PubAckReasonCode::Success, Vec::new()),
                                 }),
                             };
                             self.write_value(&mut Frame::serialize(pub_ack).unwrap()).await.unwrap();
@@ -260,15 +295,11 @@ impl Client {
                         // QoS 2: Send PUBREC, track state
                         if let Some(packet_id) = control_packet.variable_header.packet_identifier {
                             self.message_state_tracker.mark_received_publish_qos2(packet_id, topic);
-                            
+
                             let pub_rec = Frame {
                                 fix_header: FixHeader::new(ControlPacketType::PUBREC, Flags(0, 0, 0, 0)),
                                 control_packet: ControlPacket::PubRec(PubRecControlPacket {
-                                    variable_header: PubRecVariableHeader::from(
-                                        packet_id,
-                                        PubRecReasonCode::Success,
-                                        Vec::new(),
-                                    ),
+                                    variable_header: PubRecVariableHeader::from(packet_id, PubRecReasonCode::Success, Vec::new()),
                                 }),
                             };
                             self.write_value(&mut Frame::serialize(pub_rec).unwrap()).await.unwrap();
@@ -278,12 +309,12 @@ impl Client {
                 }
                 (true, false)
             }
-            
+
             ControlPacket::PubAck(control_packet) => {
                 // Received PUBACK for our outgoing QoS 1 message
                 let packet_id = control_packet.variable_header.packet_identifier;
                 tracing::debug!("Received PUBACK for packet_id={}", packet_id);
-                
+
                 if self.message_state_tracker.handle_puback(packet_id) {
                     self.packet_id_manager.release(packet_id);
                     tracing::debug!("QoS 1 message {} acknowledged", packet_id);
@@ -292,22 +323,18 @@ impl Client {
                 }
                 (true, false)
             }
-            
+
             ControlPacket::PubRec(control_packet) => {
                 // Received PUBREC for our outgoing QoS 2 message - send PUBREL
                 let packet_id = control_packet.variable_header.packet_identifier;
                 tracing::debug!("Received PUBREC for packet_id={}", packet_id);
-                
+
                 if self.message_state_tracker.handle_pubrec(packet_id) {
                     // Send PUBREL
                     let pub_rel = Frame {
                         fix_header: FixHeader::new(ControlPacketType::PUBREL, Flags(0, 1, 0, 0)), // QoS 1 for PUBREL
                         control_packet: ControlPacket::PubRel(PubRelControlPacket {
-                            variable_header: PubRelVariableHeader::from(
-                                packet_id,
-                                PubRelReasonCode::Success,
-                                Vec::new(),
-                            ),
+                            variable_header: PubRelVariableHeader::from(packet_id, PubRelReasonCode::Success, Vec::new()),
                         }),
                     };
                     self.write_value(&mut Frame::serialize(pub_rel).unwrap()).await.unwrap();
@@ -317,34 +344,30 @@ impl Client {
                 }
                 (true, false)
             }
-            
+
             ControlPacket::PubRel(control_packet) => {
                 // Received PUBREL for incoming QoS 2 message - send PUBCOMP
                 let packet_id = control_packet.variable_header.packet_identifier;
                 tracing::debug!("Received PUBREL for packet_id={}", packet_id);
-                
+
                 self.message_state_tracker.handle_pubrel(packet_id);
-                
+
                 let pub_comp = Frame {
                     fix_header: FixHeader::new(ControlPacketType::PUBCOMP, Flags(0, 0, 0, 0)),
                     control_packet: ControlPacket::PubComp(PubCompControlPacket {
-                        variable_header: PubCompVariableHeader::from(
-                            packet_id,
-                            PubCompReasonCode::Success,
-                            Vec::new(),
-                        ),
+                        variable_header: PubCompVariableHeader::from(packet_id, PubCompReasonCode::Success, Vec::new()),
                     }),
                 };
                 self.write_value(&mut Frame::serialize(pub_comp).unwrap()).await.unwrap();
                 tracing::debug!("Sent PUBCOMP for packet_id={}", packet_id);
                 (true, false)
             }
-            
+
             ControlPacket::PubComp(control_packet) => {
                 // Received PUBCOMP - QoS 2 flow complete
                 let packet_id = control_packet.variable_header.packet_identifier;
                 tracing::debug!("Received PUBCOMP for packet_id={}", packet_id);
-                
+
                 if self.message_state_tracker.handle_pubcomp(packet_id) {
                     self.packet_id_manager.release(packet_id);
                     tracing::debug!("QoS 2 message {} completed", packet_id);
@@ -353,21 +376,26 @@ impl Client {
                 }
                 (true, false)
             }
-            
+
             ControlPacket::Subscribe(control_packet) => {
-                let topics: Vec<String> = control_packet.variable_header.subscribe_payload
+                let topics: Vec<String> = control_packet
+                    .variable_header
+                    .subscribe_payload
                     .iter()
                     .map(|sub| sub.topic_filter.clone())
                     .collect();
-                    
+
                 tracing::debug!("Client {} subscribing to topics: {:?}", self.id, topics);
-                
+
                 // Notify broker
-                let _ = self.broker_sender.send(BrokerMessage::Subscribe {
-                    client_id: self.id.clone(),
-                    topics,
-                }).await;
-                
+                let _ = self
+                    .broker_sender
+                    .send(BrokerMessage::Subscribe {
+                        client_id: self.id.clone(),
+                        topics,
+                    })
+                    .await;
+
                 // Send SUBACK with granted QoS levels matching the requested ones
                 let mut sub_ack_payload = SubAckPayload::default();
                 for sub in &control_packet.variable_header.subscribe_payload {
@@ -379,53 +407,49 @@ impl Client {
                     };
                     sub_ack_payload.sub_ack_reason_codes.push(granted_qos);
                 }
-                
+
                 let sub_ack = Frame {
                     fix_header: FixHeader::new(ControlPacketType::SUBACK, Flags(0, 0, 0, 0)),
                     control_packet: ControlPacket::SubAck(SubAckControlPacket {
-                        variable_header: SubAckVariableHeader::from(
-                            control_packet.variable_header.packet_identifier,
-                            sub_ack_payload,
-                            Vec::new(),
-                        ),
+                        variable_header: SubAckVariableHeader::from(control_packet.variable_header.packet_identifier, sub_ack_payload, Vec::new()),
                     }),
                 };
                 self.write_value(&mut Frame::serialize(sub_ack).unwrap()).await.unwrap();
                 (true, false)
             }
-            
+
             ControlPacket::PingReq => {
                 self.write_value(&mut Frame::serialize(Frame::new(ControlPacketType::PINGRESP)).unwrap())
                     .await
                     .unwrap();
                 (true, false)
             }
-            
+
             ControlPacket::Disconnect(_) => {
                 tracing::info!("Client {} requested disconnect", self.id);
                 (false, true)
             }
-            
+
             _ => {
                 tracing::debug!("Unhandled packet type");
                 (true, false)
             }
         }
     }
-    
+
     async fn send_publish_to_client(&mut self, msg: PublishMessage) -> Result<(), Box<dyn std::error::Error>> {
         tracing::debug!("Sending PUBLISH to client {}: topic={}, qos={}", self.id, msg.topic, msg.qos);
-        
+
         let mut publish_packet = PublishControlPacket {
             variable_header: PublishVariableHeader::new(),
             payload: PublishPayload {
                 data: bytes::Bytes::from(msg.payload.clone()),
             },
         };
-        
+
         // Update topic name
         publish_packet.variable_header.topic_name = msg.topic.clone();
-        
+
         // Allocate packet ID for QoS 1 and 2
         let packet_id = if msg.qos > 0 {
             match self.packet_id_manager.allocate() {
@@ -433,20 +457,12 @@ impl Client {
                     // Track the message state
                     match msg.qos {
                         1 => {
-                            self.message_state_tracker.track_qos1(
-                                id,
-                                msg.topic.clone(),
-                                msg.payload.clone(),
-                                msg.retain,
-                            );
+                            self.message_state_tracker
+                                .track_qos1(id, msg.topic.clone(), msg.payload.clone(), msg.retain);
                         }
                         2 => {
-                            self.message_state_tracker.track_qos2(
-                                id,
-                                msg.topic.clone(),
-                                msg.payload.clone(),
-                                msg.retain,
-                            );
+                            self.message_state_tracker
+                                .track_qos2(id, msg.topic.clone(), msg.payload.clone(), msg.retain);
                         }
                         _ => {}
                     }
@@ -460,25 +476,20 @@ impl Client {
         } else {
             None
         };
-        
+
         publish_packet.variable_header.packet_identifier = packet_id;
-        
+
         let frame = Frame {
-            fix_header: FixHeader::new(ControlPacketType::PUBLISH, Flags(
-                if msg.retain { 1 } else { 0 },
-                msg.qos,
-                0,
-                0,
-            )),
+            fix_header: FixHeader::new(ControlPacketType::PUBLISH, Flags(if msg.retain { 1 } else { 0 }, msg.qos, 0, 0)),
             control_packet: ControlPacket::Publish(publish_packet),
         };
-        
+
         self.write_value(&mut Frame::serialize(frame)?).await?;
-        
+
         if let Some(id) = packet_id {
             tracing::debug!("Sent QoS {} PUBLISH with packet_id={}", msg.qos, id);
         }
-        
+
         Ok(())
     }
 }

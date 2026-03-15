@@ -1,3 +1,4 @@
+pub mod auth;
 pub mod broker;
 mod client;
 mod message_state;
@@ -18,7 +19,7 @@ pub async fn start_broker(bind_addr: &str) -> Result<(), Box<dyn std::error::Err
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     // This test starts an infinite server loop - disabled for unit testing
     #[tokio::test]
     #[ignore]

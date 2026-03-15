@@ -13,16 +13,16 @@ pub fn encode_conn_ack_packet(src: ConnAckControlPacket, bytes: &mut BytesMut) {
 pub fn encode_publish_packet(src: PublishControlPacket, bytes: &mut BytesMut) {
     // Encode topic name
     encode_string(&src.variable_header.topic_name, bytes);
-    
+
     // Encode packet identifier if QoS > 0
     if let Some(packet_id) = src.variable_header.packet_identifier {
         bytes.put_u16(packet_id);
     }
-    
+
     // For MQTT 3.1.1, don't encode properties (they don't exist)
     // Properties are only in MQTT 5.0
     // encode_properties(src.variable_header.get_properties(), bytes);
-    
+
     // Encode payload
     bytes.put_slice(&src.payload.data);
 }
@@ -55,11 +55,8 @@ pub fn encode_sub_ack_payload(src: SubAckPayload, bytes: &mut BytesMut) {
 #[allow(dead_code)]
 pub fn encode_properties(src: Vec<Option<Property>>, bytes: &mut BytesMut) {
     let mut data: BytesMut = BytesMut::new();
-    for elem in src.iter() {
-        match elem {
-            Some(property) => encode_property(property, &mut data),
-            None => (),
-        }
+    for property in src.iter().flatten() {
+        encode_property(property, &mut data);
     }
     bytes.extend(VariableByteInteger::encode_u32(data.len() as u32));
     bytes.extend(data);

@@ -1,5 +1,8 @@
-use crate::protocol::{definitions::*, packet::*};
+// Allow field assignments after Default::default() for clarity in decoder patterns
+#![allow(clippy::field_reassign_with_default)]
+
 use super::Error;
+use crate::protocol::{definitions::*, packet::*};
 use bytes::{Buf, Bytes, BytesMut};
 use num_traits::FromPrimitive;
 use std::io::Cursor;
@@ -22,7 +25,8 @@ pub fn decode_fix_header(src: &mut Cursor<&[u8]>) -> Option<FixHeader> {
 pub fn decode_connect_packet(src: &mut Cursor<&[u8]>) -> Result<ConnectControlPacket, Error> {
     let mut connect_control_packet: ConnectControlPacket = Default::default();
     connect_control_packet.variable_header = decode_connect_variable_header(src)?;
-    connect_control_packet.payload = decode_connect_payload(src, connect_control_packet.variable_header.connect_flag.clone())?;
+    let protocol_version = connect_control_packet.variable_header.protocol_version;
+    connect_control_packet.payload = decode_connect_payload(src, connect_control_packet.variable_header.connect_flag.clone(), protocol_version)?;
     Ok(connect_control_packet)
 }
 pub fn decode_connect_variable_header(src: &mut Cursor<&[u8]>) -> Result<ConnectVariableHeader, Error> {
@@ -39,11 +43,16 @@ pub fn decode_connect_variable_header(src: &mut Cursor<&[u8]>) -> Result<Connect
     }
     Ok(connect_variable_header)
 }
-pub fn decode_connect_payload(src: &mut Cursor<&[u8]>, connect_flag: ConnectFlags) -> Result<ConnectPayload, Error> {
+pub fn decode_connect_payload(src: &mut Cursor<&[u8]>, connect_flag: ConnectFlags, protocol_version: u8) -> Result<ConnectPayload, Error> {
     let mut connect_payload: ConnectPayload = Default::default();
     connect_payload.client_identifier = decode_string(src)?;
     if connect_flag.will_flag {
-        connect_payload.will_properties = decode_properties(src)?;
+        // Will properties are only present in MQTT 5.0
+        if protocol_version == 5 {
+            connect_payload.will_properties = decode_properties(src)?;
+        } else {
+            connect_payload.will_properties = Vec::new();
+        }
         connect_payload.will_topic = Some(decode_string(src)?);
         connect_payload.will_payload = Some(decode_binary_data(src)?);
     }
@@ -92,8 +101,8 @@ pub fn decode_pub_rel_variable_header(src: &mut Cursor<&[u8]>) -> Result<PubRelV
     let mut pub_rel_variable_header: PubRelVariableHeader = Default::default();
     pub_rel_variable_header.packet_identifier = src.get_u16();
     if src.has_remaining() {
-        pub_rel_variable_header.reason_code = PubRelReasonCode::from_u8(src.get_u8())
-            .ok_or_else(|| Error::Other("Invalid PubRel reason code".to_string()))?;
+        pub_rel_variable_header.reason_code =
+            PubRelReasonCode::from_u8(src.get_u8()).ok_or_else(|| Error::Other("Invalid PubRel reason code".to_string()))?;
         if src.has_remaining() {
             pub_rel_variable_header.set_properties(decode_properties(src)?);
         }
@@ -112,8 +121,8 @@ pub fn decode_pub_ack_variable_header(src: &mut Cursor<&[u8]>) -> Result<PubAckV
     let mut pub_ack_variable_header: PubAckVariableHeader = Default::default();
     pub_ack_variable_header.packet_identifier = src.get_u16();
     if src.has_remaining() {
-        pub_ack_variable_header.reason_code = PubAckReasonCode::from_u8(src.get_u8())
-            .ok_or_else(|| Error::Other("Invalid PubAck reason code".to_string()))?;
+        pub_ack_variable_header.reason_code =
+            PubAckReasonCode::from_u8(src.get_u8()).ok_or_else(|| Error::Other("Invalid PubAck reason code".to_string()))?;
         if src.has_remaining() {
             pub_ack_variable_header.set_properties(decode_properties(src)?);
         }
@@ -132,8 +141,8 @@ pub fn decode_pub_rec_variable_header(src: &mut Cursor<&[u8]>) -> Result<PubRecV
     let mut pub_rec_variable_header: PubRecVariableHeader = Default::default();
     pub_rec_variable_header.packet_identifier = src.get_u16();
     if src.has_remaining() {
-        pub_rec_variable_header.reason_code = PubRecReasonCode::from_u8(src.get_u8())
-            .ok_or_else(|| Error::Other("Invalid PubRec reason code".to_string()))?;
+        pub_rec_variable_header.reason_code =
+            PubRecReasonCode::from_u8(src.get_u8()).ok_or_else(|| Error::Other("Invalid PubRec reason code".to_string()))?;
         if src.has_remaining() {
             pub_rec_variable_header.set_properties(decode_properties(src)?);
         }
@@ -152,8 +161,8 @@ pub fn decode_pub_comp_variable_header(src: &mut Cursor<&[u8]>) -> Result<PubCom
     let mut pub_comp_variable_header: PubCompVariableHeader = Default::default();
     pub_comp_variable_header.packet_identifier = src.get_u16();
     if src.has_remaining() {
-        pub_comp_variable_header.reason_code = PubCompReasonCode::from_u8(src.get_u8())
-            .ok_or_else(|| Error::Other("Invalid PubComp reason code".to_string()))?;
+        pub_comp_variable_header.reason_code =
+            PubCompReasonCode::from_u8(src.get_u8()).ok_or_else(|| Error::Other("Invalid PubComp reason code".to_string()))?;
         if src.has_remaining() {
             pub_comp_variable_header.set_properties(decode_properties(src)?);
         }
@@ -196,8 +205,8 @@ pub fn decode_disconnect_packet(src: &mut Cursor<&[u8]>) -> Result<DisconnectCon
 pub fn decode_disconnect_variable_header(src: &mut Cursor<&[u8]>) -> Result<DisconnectVariableHeader, Error> {
     let mut disconnect_variable_header: DisconnectVariableHeader = Default::default();
     if src.has_remaining() {
-        disconnect_variable_header.disconnect_reason_code = DisconnectReasonCode::from_u8(src.get_u8())
-            .ok_or_else(|| Error::Other("Invalid disconnect reason code".to_string()))?;
+        disconnect_variable_header.disconnect_reason_code =
+            DisconnectReasonCode::from_u8(src.get_u8()).ok_or_else(|| Error::Other("Invalid disconnect reason code".to_string()))?;
         if src.has_remaining() {
             disconnect_variable_header.set_properties(decode_properties(src)?);
         }
@@ -216,10 +225,10 @@ pub fn decode_string(src: &mut Cursor<&[u8]>) -> Result<String, Error> {
     if src.remaining() < 2 {
         return Err(Error::Incomplete(2 - src.remaining()));
     }
-    
+
     let str_size_bytes = src.get_u16() as usize;
     let position = src.position() as usize;
-    
+
     // Check if we have enough bytes for the actual string data
     if src.get_ref().len() < position + str_size_bytes {
         return Err(Error::Incomplete(position + str_size_bytes - src.get_ref().len()));
@@ -239,10 +248,10 @@ pub fn decode_binary_data(src: &mut Cursor<&[u8]>) -> Result<Bytes, Error> {
     if src.remaining() < 2 {
         return Err(Error::Incomplete(2 - src.remaining()));
     }
-    
+
     let data_size_bytes = src.get_u16() as usize;
     let position = src.position() as usize;
-    
+
     // Check if we have enough bytes for the actual binary data
     if src.get_ref().len() < position + data_size_bytes {
         return Err(Error::Incomplete(position + data_size_bytes - src.get_ref().len()));
@@ -257,12 +266,12 @@ pub fn decode_binary_data(src: &mut Cursor<&[u8]>) -> Result<Bytes, Error> {
 pub fn decode_properties(src: &mut Cursor<&[u8]>) -> Result<Vec<Option<Property>>, Error> {
     let variable_byte_integer = VariableByteInteger::from(src);
     let lenght = variable_byte_integer.data as u64;
-    
+
     // If property length is 0, return empty properties
     if lenght == 0 {
         return Ok(Vec::new());
     }
-    
+
     let mut properties: Vec<Option<Property>> = Vec::new();
     let current_pos = src.position();
     while src.position() - current_pos < lenght {
@@ -288,8 +297,7 @@ pub fn decode_properties(src: &mut Cursor<&[u8]>) -> Result<Vec<Option<Property>
             33 => Property::ReceiveMaximum(src.get_u16()),
             34 => Property::TopicAliasMaximum(src.get_u16()),
             35 => Property::TopicAlias(src.get_u16()),
-            36 => Property::MaximumQoS(Qos::from_u8(src.get_u8())
-                .ok_or_else(|| Error::Other("Invalid QoS value".to_string()))?),
+            36 => Property::MaximumQoS(Qos::from_u8(src.get_u8()).ok_or_else(|| Error::Other("Invalid QoS value".to_string()))?),
             37 => Property::RetainAvailable(src.get_u8()),
             38 => Property::UserProperty(decode_string(src)?),
             39 => Property::MaximumPacketSize(src.get_u32()),

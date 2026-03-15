@@ -1,5 +1,5 @@
 /// Packet Identifier Manager for MQTT QoS 1 and QoS 2
-/// 
+///
 /// Manages unique packet identifiers in the range 1-65535
 /// as required by MQTT 3.1.1 specification.
 use std::collections::HashSet;
@@ -71,9 +71,9 @@ mod tests {
     fn test_release_and_reuse() {
         let mut manager = PacketIdManager::new();
         let id1 = manager.allocate().unwrap();
-        
+
         manager.release(id1);
-        
+
         // Should eventually reuse id1
         for _ in 0..100 {
             let id = manager.allocate().unwrap();
